@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#173b35">
+  <meta name="description" content="从第一簇篝火到无尽星海。一座会在你离开时继续生长的文明。">
+  <title>曦原 · 文明生长之地</title>
+  <link rel="icon" href="./assets/sun.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="game-shell">
+    <header class="masthead">
+      <a class="brand" href="./" aria-label="曦原首页"><span class="brand-mark" data-icon="sun"></span><span><strong>曦 原</strong><small>D A W N L A N D S</small></span></a>
+      <button class="era-badge" id="era-button" aria-label="查看文明时代"><span class="era-gem" data-icon="flame"></span><span><small id="era-kicker">文明纪元 · I</small><b id="era-name">石器时代</b></span><span class="era-next" data-icon="chevron"></span></button>
+      <div class="header-actions"><span class="saved-indicator"><i></i><span id="save-status">文明已保存</span></span><button class="icon-button" id="sound-button" aria-label="开启环境音" aria-pressed="false" data-icon="sound-off"></button><button class="icon-button" id="help-button" aria-label="玩法与存档设置" data-icon="gear"></button></div>
+    </header>
+    <section class="resource-band" aria-label="文明资源" id="resource-band"></section>
+    <main class="game-layout">
+      <aside class="left-sidebar">
+        <div class="chapter-heading"><span class="eyebrow">A CIVILIZATION BEGINS</span><h1>文明，<br>在此生长。</h1><p id="era-subtitle">让第一缕炊烟，成为文明的起点</p><div class="ornament"><i></i><span>✦</span><i></i></div></div>
+        <section class="parchment milestones"><div class="section-title"><span data-icon="scroll"></span><h2>开拓手记</h2><span class="tiny-tag" id="goal-count">0 / 4</span></div><div id="milestones"></div></section>
+        <section class="settlement-stats"><div class="section-title"><span data-icon="people"></span><h2>聚落一览</h2></div><div id="settlement-stats"></div><button class="text-button" id="policy-button">调整发展方针 <span data-icon="arrow"></span></button></section>
+        <div class="offline-note"><span data-icon="moon"></span><p>你休息时，文明也在生长。<br><strong>最多储存 24 小时离线产出</strong></p></div>
+      </aside>
+      <section class="world-column">
+        <div class="mobile-objective" id="mobile-objective"></div>
+        <div class="map-viewport" id="map-viewport" role="region" aria-label="可交互的文明地图">
+          <div class="map-scene" id="map-scene"><div class="map-art" id="map-art"></div><div class="map-vignette"></div><div class="map-cloud cloud-one"></div><div class="map-cloud cloud-two"></div><div id="map-buildings"></div><div class="settlement-smoke" aria-hidden="true"></div><div id="new-structures"></div></div>
+          <div class="map-heading"><span class="map-location-icon" data-icon="pin"></span><div><span class="eyebrow">YOUR LITTLE WORLD</span><h2 id="world-name">初火之谷</h2></div><span class="live-tag"><i></i> 生长中</span></div>
+          <button class="map-event" id="expedition-notice" hidden><span data-icon="compass"></span><span>探索队已归来<small>查看新的发现</small></span><span data-icon="chevron"></span></button>
+          <div class="map-controls"><button class="map-control" id="zoom-in" aria-label="放大地图" data-icon="plus"></button><button class="map-control" id="zoom-out" aria-label="缩小地图" data-icon="minus"></button><button class="map-control" id="map-home" aria-label="复位地图" data-icon="target"></button></div>
+          <div class="map-compass" aria-hidden="true"><b>N</b><span data-icon="compass"></span></div>
+          <div class="map-caption"><span id="world-year">纪元 1 年 · 河谷聚落</span><span>一切伟大，皆始于微小</span></div>
+        </div>
+        <div class="construction-strip" id="construction-strip"></div>
+        <nav class="bottom-navigation" aria-label="主要功能"><button class="nav-item active" data-tab="world" aria-current="page"><span data-icon="map"></span><b>领地</b><small>WORLD</small></button><button class="nav-item" data-tab="build"><span data-icon="hammer"></span><b>建设</b><small>BUILD</small><i id="build-dot" hidden></i></button><button class="nav-item" data-tab="research"><span data-icon="science"></span><b>科技</b><small>RESEARCH</small></button><button class="nav-item" data-tab="explore"><span data-icon="compass"></span><b>远征</b><small>EXPLORE</small><i id="explore-dot" hidden></i></button><button class="nav-item" data-tab="eras"><span data-icon="planet"></span><b>纪元</b><small>ERAS</small></button></nav>
+      </section>
+      <aside class="right-sidebar" id="right-sidebar" aria-label="建筑与文明详情"><div class="panel-mobile-handle"></div><button class="panel-close icon-button" id="panel-close" aria-label="关闭详情" data-icon="close"></button><div id="detail-panel"></div></aside>
+    </main>
+    <footer class="desktop-footer"><span>曦原 · 从一簇篝火，到无尽星海</span><span id="session-note">实时发展 · 自动存档 · 离线成长</span></footer>
+  </div>
+  <div class="sheet-scrim" id="sheet-scrim" hidden></div>
+  <dialog id="game-dialog"><button class="dialog-close icon-button" id="dialog-close" aria-label="关闭弹窗" data-icon="close"></button><div id="dialog-content"></div></dialog>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
