@@ -1,4 +1,4 @@
-import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=2';
+import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=3';
 
 export const SAVE_KEY = 'xiyuan.civilization.v1';
 export const RESOURCE_IDS = ['wood', 'stone', 'food', 'coin', 'knowledge'];
@@ -57,7 +57,7 @@ export function newGame(now = Date.now()) {
     buildings: Object.fromEntries(BUILDINGS.map(b => [b.id, ['hall', 'farm', 'lumber', 'quarry', 'homes'].includes(b.id) ? 1 : 0])),
     population: 12, growthProgress: 0, technologies: [], repeatResearch: 0,
     construction: [], research: null, expedition: null, expeditionReward: null,
-    world: newWorld(),
+    world: newWorld(now),
     explored: 0, produced: 0, claimed: [], chronicle: [{ at: now, text: '第一簇篝火亮起。十二位同行者，在河谷安下了家。' }],
   };
 }
@@ -279,13 +279,14 @@ export function advanceTime(state, now = Date.now(), offline = false) {
   // Events split time, so completed buildings never produce retroactively.
   while (cursor < now) {
     let surveyWake = Infinity;
-    if (cursor < capEnd && state.world.auto && !state.world.survey) {
+    if (cursor >= state.world.startedAt && cursor < capEnd && state.world.auto && !state.world.survey) {
       const plan = automaticSurveyPlan(state);
       if (plan && state.resources.food >= plan.food) beginSurvey(state, plan, cursor);
       else if (plan) surveyWake = cursor + Math.max(1, Math.ceil((plan.food - state.resources.food) / rates(state).food * 60000));
     }
     const growthBoundary = cursor < capEnd && state.population < populationCap(state) ? cursor + Math.max(1, (60 - state.growthProgress) * 1000 / (hasTech(state, 'habitat') ? 2 : 1)) : Infinity;
-    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
+    const worldStart = cursor < state.world.startedAt ? state.world.startedAt : Infinity;
+    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, worldStart, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
     const end = Math.max(cursor, next);
     produce(state, Math.max(0, Math.min(end, capEnd) - Math.min(cursor, capEnd)) / 1000);
     cursor = end;
@@ -319,7 +320,7 @@ export function advanceTime(state, now = Date.now(), offline = false) {
       state.expedition = null; messages.push('探索队已归来，等待你查看发现'); event = true;
     }
     if (cursor >= now) break;
-    if (!event && end === next && next !== growthBoundary && next !== capEnd && next !== surveyWake) break;
+    if (!event && end === next && next !== growthBoundary && next !== capEnd && next !== surveyWake && next !== worldStart) break;
   }
   state.lastTick = now;
   if (discoveries) messages.push(discoveries === 1 ? state.chronicle.find(entry => entry.at > start)?.text ?? '探索队完成了一次勘探' : `探索队完成 ${discoveries} 次勘探，世界地图已更新`);

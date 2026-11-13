@@ -1,4 +1,4 @@
-import { TERRAIN } from './world-terrain.js?v=2';
+import { TERRAIN } from './world-terrain.js?v=3';
 
 export const WORLD = { columns: 48, rows: 34, radius: 25, width: 2122, height: 1288, home: 877 };
 export const BIOMES = {
@@ -40,18 +40,19 @@ export function tileInfo(id) {
   if (biome === 'ocean' && hash(id) > .965) site = 'port';
   return { id, biome, site, ...BIOMES[biome], label: id === WORLD.home ? '曦原 · 家园' : site ? SITES[site].name : BIOMES[biome].name };
 }
-export function newWorld() {
+export function newWorld(now = Date.now()) {
   const revealed = new Set([WORLD.home]);
   let edge = [WORLD.home];
   for (let depth = 0; depth < 3; depth++) {
     edge = [...new Set(edge.flatMap(neighbors).filter(id => !revealed.has(id)))];
     edge.forEach(id => revealed.add(id));
   }
-  return { revealed: [...revealed], visited: [WORLD.home], sites: [], position: WORLD.home, survey: null, auto: true, direction: 'balanced', trips: 0 };
+  return { startedAt: now, revealed: [...revealed], visited: [WORLD.home], sites: [], position: WORLD.home, survey: null, auto: true, direction: 'balanced', trips: 0 };
 }
 export function restoreWorld(saved, now) {
-  const result = newWorld();
+  const result = newWorld(now);
   if (!saved || typeof saved !== 'object') return result;
+  result.startedAt = Number.isFinite(saved.startedAt) && saved.startedAt >= 0 ? Math.min(now, saved.startedAt) : now;
   const validId = id => Number.isInteger(id) && id >= 0 && id < WORLD.columns * WORLD.rows;
   for (const key of ['revealed', 'visited', 'sites']) {
     if (Array.isArray(saved[key])) result[key] = [...new Set(saved[key].filter(validId))];

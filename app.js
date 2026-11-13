@@ -3,9 +3,9 @@ import {
   newGame, restoreGame, capacity, populationCap, rates, buildingName, buildingPlan,
   canAfford, startBuilding, nextResearch, startResearch, expeditionPlan, startExpedition,
   collectExpedition, claimMilestone, eraRequirements, advanceEra, advanceTime, startSurvey,
-} from './engine.js?v=2';
-import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=2';
-import { LivingSettlement, WorldMap } from './scene.js?v=2';
+} from './engine.js?v=3';
+import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=3';
+import { LivingSettlement, WorldMap } from './scene.js?v=3';
 
 const PATHS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/>',
