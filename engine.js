@@ -1,9 +1,11 @@
+import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=2';
+
 export const SAVE_KEY = 'xiyuan.civilization.v1';
 export const RESOURCE_IDS = ['wood', 'stone', 'food', 'coin', 'knowledge'];
 export const OFFLINE_LIMIT = 24 * 60 * 60 * 1000;
 
 export const ERAS = [
-  { name: '石器时代', subtitle: '让第一缕炊烟，成为文明的起点', art: 'stone', hall: 1, tech: 0, threshold: 0, duration: '初火纪元', labels: ['木材', '石料', '食物', '贝币', '学识'] },
+  { name: '石器时代', subtitle: '让第一缕炊烟，成为文明的起点', art: 'stone-living', hall: 1, tech: 0, threshold: 0, duration: '初火纪元', labels: ['木材', '石料', '食物', '贝币', '学识'] },
   { name: '青铜时代', subtitle: '在河流与田野之间，筑起第一座城', art: 'valley', hall: 3, tech: 2, threshold: 800, duration: '聚落纪元', labels: ['木材', '石料', '粮食', '铜币', '学识'] },
   { name: '古典时代', subtitle: '道路连接城邦，思想越过群山', art: 'valley', hall: 5, tech: 4, threshold: 4000, duration: '城邦纪元', labels: ['木材', '石料', '粮食', '金币', '学识'] },
   { name: '工业时代', subtitle: '让蒸汽与钢铁，唤醒整个世界', art: 'future', hall: 8, tech: 6, threshold: 20000, duration: '机械纪元', labels: ['燃料', '钢材', '补给', '资本', '科学'] },
@@ -55,6 +57,7 @@ export function newGame(now = Date.now()) {
     buildings: Object.fromEntries(BUILDINGS.map(b => [b.id, ['hall', 'farm', 'lumber', 'quarry', 'homes'].includes(b.id) ? 1 : 0])),
     population: 12, growthProgress: 0, technologies: [], repeatResearch: 0,
     construction: [], research: null, expedition: null, expeditionReward: null,
+    world: newWorld(),
     explored: 0, produced: 0, claimed: [], chronicle: [{ at: now, text: '第一簇篝火亮起。十二位同行者，在河谷安下了家。' }],
   };
 }
@@ -90,6 +93,7 @@ export function restoreGame(raw, now = Date.now()) {
     state.expedition = validJob(saved.expedition) && ['near', 'far', 'unknown'].includes(saved.expedition.route) ? saved.expedition : null;
     const reward = saved.expeditionReward;
     state.expeditionReward = reward && typeof reward.title === 'string' && reward.resources && RESOURCE_IDS.every(id => reward.resources[id] === undefined || Number.isFinite(reward.resources[id]) && reward.resources[id] >= 0) ? reward : null;
+    state.world = restoreWorld(saved.world, now);
     return state;
   } catch {
     return newGame(now);
@@ -117,7 +121,8 @@ export function rates(state) {
   if (hasTech(state, 'electricity')) global *= 1.4;
   if (hasTech(state, 'orbital')) global *= 1.6;
   if (hasTech(state, 'dyson')) global *= 2;
-  for (const id of RESOURCE_IDS) rates[id] *= global;
+  const discovery = explorationBonuses(state);
+  for (const id of RESOURCE_IDS) rates[id] *= global * discovery[id];
   if (hasTech(state, 'agriculture')) rates.food *= 1.3;
   if (hasTech(state, 'trade')) rates.coin *= 1.3;
   if (hasTech(state, 'writing')) rates.knowledge *= 1.3;
@@ -208,6 +213,16 @@ export function collectExpedition(state, now = Date.now()) {
   return { ok: true, message: title };
 }
 
+export function startSurvey(state, target, now = Date.now()) {
+  if (!Number.isInteger(target) || target < 0 || target >= WORLD.columns * WORLD.rows) return { ok: false, message: '请选择地图上的地区' };
+  if (state.world.survey) return { ok: false, message: '探索队正在途中，请等本次勘探结束' };
+  const plan = surveyPlan(state, target);
+  if (plan.blocked) return { ok: false, message: plan.blocked };
+  if (state.resources.food < plan.food) return { ok: false, message: '补给不足，居民正在准备食物' };
+  beginSurvey(state, plan, now);
+  return { ok: true, message: '探索队出发了，前往世界地图可跟随他们的脚步' };
+}
+
 export const MILESTONES = [
   { id: 'first', name: '筑起文明的基石', detail: '完成任意一次建筑升级', test: s => Object.values(s.buildings).some(l => l >= 2), reward: { wood: 50, stone: 40, knowledge: 15 } },
   { id: 'wisdom', name: '点亮第一项发现', detail: '研究「磨制石器」', test: s => hasTech(s, 'tools'), reward: { coin: 40, knowledge: 20 } },
@@ -259,15 +274,29 @@ export function advanceTime(state, now = Date.now(), offline = false) {
   const before = { ...state.resources };
   const capEnd = offline ? Math.min(now, start + OFFLINE_LIMIT) : now;
   const messages = [];
+  let discoveries = 0;
   let cursor = start;
   // Events split time, so completed buildings never produce retroactively.
   while (cursor < now) {
+    let surveyWake = Infinity;
+    if (cursor < capEnd && state.world.auto && !state.world.survey) {
+      const plan = automaticSurveyPlan(state);
+      if (plan && state.resources.food >= plan.food) beginSurvey(state, plan, cursor);
+      else if (plan) surveyWake = cursor + Math.max(1, Math.ceil((plan.food - state.resources.food) / rates(state).food * 60000));
+    }
     const growthBoundary = cursor < capEnd && state.population < populationCap(state) ? cursor + Math.max(1, (60 - state.growthProgress) * 1000 / (hasTech(state, 'habitat') ? 2 : 1)) : Infinity;
-    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, growthBoundary, cursor < capEnd ? capEnd : Infinity);
+    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
     const end = Math.max(cursor, next);
     produce(state, Math.max(0, Math.min(end, capEnd) - Math.min(cursor, capEnd)) / 1000);
     cursor = end;
     let event = false;
+    if (state.world.survey?.end <= cursor) {
+      const result = completeSurvey(state);
+      addResources(state, result.reward);
+      log(state, result.text, cursor);
+      discoveries++;
+      event = true;
+    }
     if (state.construction[0]?.end <= cursor) {
       const job = state.construction.shift();
       state.buildings[job.id] = Math.max(state.buildings[job.id], job.level);
@@ -290,8 +319,9 @@ export function advanceTime(state, now = Date.now(), offline = false) {
       state.expedition = null; messages.push('探索队已归来，等待你查看发现'); event = true;
     }
     if (cursor >= now) break;
-    if (!event && end === next && next !== growthBoundary && next !== capEnd) break;
+    if (!event && end === next && next !== growthBoundary && next !== capEnd && next !== surveyWake) break;
   }
   state.lastTick = now;
-  return { elapsed: now - start, capped: now - start > OFFLINE_LIMIT, gains: Object.fromEntries(RESOURCE_IDS.map(id => [id, Math.max(0, state.resources[id] - before[id])])), messages };
+  if (discoveries) messages.push(discoveries === 1 ? state.chronicle.find(entry => entry.at > start)?.text ?? '探索队完成了一次勘探' : `探索队完成 ${discoveries} 次勘探，世界地图已更新`);
+  return { elapsed: now - start, capped: now - start > OFFLINE_LIMIT, gains: Object.fromEntries(RESOURCE_IDS.map(id => [id, Math.max(0, state.resources[id] - before[id])])), messages, discoveries };
 }

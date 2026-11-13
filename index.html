@@ -7,7 +7,7 @@
   <meta name="description" content="从第一簇篝火到无尽星海。一座会在你离开时继续生长的文明。">
   <title>曦原 · 文明生长之地</title>
   <link rel="icon" href="./assets/sun.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=2">
 </head>
 <body>
   <div class="game-shell">
@@ -27,15 +27,15 @@
       <section class="world-column">
         <div class="mobile-objective" id="mobile-objective"></div>
         <div class="map-viewport" id="map-viewport" role="region" aria-label="可交互的文明地图">
-          <div class="map-scene" id="map-scene"><div class="map-art" id="map-art"></div><div class="map-vignette"></div><div class="map-cloud cloud-one"></div><div class="map-cloud cloud-two"></div><div id="map-buildings"></div><div class="settlement-smoke" aria-hidden="true"></div><div id="new-structures"></div></div>
-          <div class="map-heading"><span class="map-location-icon" data-icon="pin"></span><div><span class="eyebrow">YOUR LITTLE WORLD</span><h2 id="world-name">初火之谷</h2></div><span class="live-tag"><i></i> 生长中</span></div>
+          <div class="map-scene" id="map-scene"><div class="map-art" id="map-art"></div><div class="map-vignette"></div><div class="map-cloud cloud-one"></div><div class="map-cloud cloud-two"></div><div id="map-buildings"></div><div class="settlement-smoke" aria-hidden="true"></div><div id="new-structures"></div><canvas class="living-settlement" id="living-settlement" aria-hidden="true"></canvas></div>
+          <div class="world-map-view" id="world-map-view" hidden><canvas id="world-canvas" tabindex="0" aria-label="世界地图，可拖动或用方向键移动，点击地区查看探索详情"></canvas></div><div class="map-mode-switch" role="group" aria-label="地图视图"><button data-action="map-mode" data-id="home" class="active" aria-pressed="true">聚落</button><button data-action="map-mode" data-id="world" aria-pressed="false">世界地图</button></div><button class="motion-toggle" id="motion-toggle" aria-label="暂停场景动画" aria-pressed="false">Ⅱ</button><div class="world-tools" id="world-tools" hidden><button data-action="follow-scout" aria-label="跟随探索队">跟随探索队</button><button data-action="fit-world" aria-label="查看整个世界">世界全貌</button></div><div class="world-map-hud" id="world-map-hud" hidden></div><div class="map-heading"><span class="map-location-icon" data-icon="pin"></span><div><span class="eyebrow">YOUR LITTLE WORLD</span><h2 id="world-name">初火之谷</h2></div><span class="live-tag"><i></i> 生长中</span></div>
           <button class="map-event" id="expedition-notice" hidden><span data-icon="compass"></span><span>探索队已归来<small>查看新的发现</small></span><span data-icon="chevron"></span></button>
           <div class="map-controls"><button class="map-control" id="zoom-in" aria-label="放大地图" data-icon="plus"></button><button class="map-control" id="zoom-out" aria-label="缩小地图" data-icon="minus"></button><button class="map-control" id="map-home" aria-label="复位地图" data-icon="target"></button></div>
           <div class="map-compass" aria-hidden="true"><b>N</b><span data-icon="compass"></span></div>
           <div class="map-caption"><span id="world-year">纪元 1 年 · 河谷聚落</span><span>一切伟大，皆始于微小</span></div>
         </div>
         <div class="construction-strip" id="construction-strip"></div>
-        <nav class="bottom-navigation" aria-label="主要功能"><button class="nav-item active" data-tab="world" aria-current="page"><span data-icon="map"></span><b>领地</b><small>WORLD</small></button><button class="nav-item" data-tab="build"><span data-icon="hammer"></span><b>建设</b><small>BUILD</small><i id="build-dot" hidden></i></button><button class="nav-item" data-tab="research"><span data-icon="science"></span><b>科技</b><small>RESEARCH</small></button><button class="nav-item" data-tab="explore"><span data-icon="compass"></span><b>远征</b><small>EXPLORE</small><i id="explore-dot" hidden></i></button><button class="nav-item" data-tab="eras"><span data-icon="planet"></span><b>纪元</b><small>ERAS</small></button></nav>
+        <nav class="bottom-navigation" aria-label="主要功能"><button class="nav-item active" data-tab="world" aria-current="page"><span data-icon="map"></span><b>领地</b><small>WORLD</small></button><button class="nav-item" data-tab="build"><span data-icon="hammer"></span><b>建设</b><small>BUILD</small><i id="build-dot" hidden></i></button><button class="nav-item" data-tab="research"><span data-icon="science"></span><b>科技</b><small>RESEARCH</small></button><button class="nav-item" data-tab="explore"><span data-icon="compass"></span><b>世界</b><small>EXPLORE</small><i id="explore-dot" hidden></i></button><button class="nav-item" data-tab="eras"><span data-icon="planet"></span><b>纪元</b><small>ERAS</small></button></nav>
       </section>
       <aside class="right-sidebar" id="right-sidebar" aria-label="建筑与文明详情"><div class="panel-mobile-handle"></div><button class="panel-close icon-button" id="panel-close" aria-label="关闭详情" data-icon="close"></button><div id="detail-panel"></div></aside>
     </main>
@@ -44,6 +44,6 @@
   <div class="sheet-scrim" id="sheet-scrim" hidden></div>
   <dialog id="game-dialog"><button class="dialog-close icon-button" id="dialog-close" aria-label="关闭弹窗" data-icon="close"></button><div id="dialog-content"></div></dialog>
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=2"></script>
 </body>
 </html>
