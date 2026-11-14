@@ -1,4 +1,5 @@
-import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=3';
+import { newBase, restoreBase, fits } from './base.js?v=4';
+import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=4';
 
 export const SAVE_KEY = 'xiyuan.civilization.v1';
 export const RESOURCE_IDS = ['wood', 'stone', 'food', 'coin', 'knowledge'];
@@ -27,6 +28,8 @@ export const BUILDINGS = [
   { id: 'tower', name: '远行者营地', later: '深空探索港', icon: 'compass', sprite: 0, x: 75, y: 66, description: '为探索者准备行装。每级缩短远征时间并提高发现收益。', cost: { wood: 55, stone: 35, food: 35 }, seconds: 22, unlock: 1 },
 ];
 
+BUILDINGS.push({id:'barracks',name:'兵营',later:'军事训练中心',icon:'hammer',sprite:0,x:50,y:70,description:'训练长矛兵与弓箭手。士兵会在营地巡逻，提升文明的军事力量。',cost:{wood:70,stone:45,food:20},seconds:22,unlock:2});
+
 export const TECHNOLOGIES = [
   { id: 'tools', name: '磨制石器', icon: 'stone', detail: '生产效率 +15%', cost: 20, seconds: 25, era: 0 },
   { id: 'agriculture', name: '驯化与耕种', icon: 'wheat', detail: '食物产出 +30%', cost: 35, seconds: 45, era: 0 },
@@ -51,15 +54,17 @@ export const POLICIES = {
 };
 
 export function newGame(now = Date.now()) {
-  return {
+  const state = {
     version: 1, createdAt: now, lastTick: now, era: 0, cycle: 0, policy: 'balanced',
     resources: { wood: 185, stone: 145, food: 180, coin: 85, knowledge: 30 },
-    buildings: Object.fromEntries(BUILDINGS.map(b => [b.id, ['hall', 'farm', 'lumber', 'quarry', 'homes'].includes(b.id) ? 1 : 0])),
+    buildings: Object.fromEntries(BUILDINGS.map(b => [b.id, b.id === 'hall' ? 1 : 0])),
     population: 12, growthProgress: 0, technologies: [], repeatResearch: 0,
     construction: [], research: null, expedition: null, expeditionReward: null,
     world: newWorld(now),
     explored: 0, produced: 0, claimed: [], chronicle: [{ at: now, text: '第一簇篝火亮起。十二位同行者，在河谷安下了家。' }],
   };
+  state.base = newBase(state.buildings);
+  return state;
 }
 
 function finite(value, fallback, maximum = 1e200) {
@@ -94,6 +99,7 @@ export function restoreGame(raw, now = Date.now()) {
     const reward = saved.expeditionReward;
     state.expeditionReward = reward && typeof reward.title === 'string' && reward.resources && RESOURCE_IDS.every(id => reward.resources[id] === undefined || Number.isFinite(reward.resources[id]) && reward.resources[id] >= 0) ? reward : null;
     state.world = restoreWorld(saved.world, now);
+    state.base = restoreBase(saved.base, state, now);
     return state;
   } catch {
     return newGame(now);
@@ -112,9 +118,9 @@ export function buildingName(state, building) {
 }
 
 export function rates(state) {
-  const rates = { wood: 3, stone: 2, food: 4, coin: 3, knowledge: 3 };
+  const rates = { wood: state.base.jobs.wood * 7, stone: state.base.jobs.stone * 6, food: state.base.jobs.food * 9, coin: 3, knowledge: 3 };
   for (const building of BUILDINGS) {
-    if (building.resource) rates[building.resource] += building.rate * (1.48 ** state.buildings[building.id] - 1) / .48;
+    if (building.resource) rates[building.resource] += (['wood','stone','food'].includes(building.resource) ? state.base.jobs[building.resource] / 3 : 1) * building.rate * (1.48 ** state.buildings[building.id] - 1) / .48;
   }
   let global = (1 + state.population * .012) * 1.35 ** state.era * 1.2 ** state.repeatResearch;
   if (hasTech(state, 'tools')) global *= 1.15;
@@ -159,12 +165,15 @@ export function addResources(state, resourceMap) {
 }
 function log(state, text, at) { state.chronicle.unshift({ text, at }); state.chronicle = state.chronicle.slice(0, 30); }
 
-export function startBuilding(state, id, now = Date.now()) {
+export function startBuilding(state, id, now = Date.now(), position = null) {
   const plan = buildingPlan(state, id);
+  if (plan && state.base.jobs.builder < 1) return {ok:false,message:'请先安排至少一名农民施工'};
+  if (plan && !state.base.positions[id] && !fits(state.base,id,position)) return {ok:false,message:'请在地图上选择一块可建造空地'};
   if (!plan || plan.locked) return { ok: false, message: '提升文明中枢后解锁' };
   if (state.construction.length >= 3) return { ok: false, message: '建设队列已满，请等待当前工程完成' };
   if (!canAfford(state, plan.cost)) return { ok: false, message: '资源还不够，居民正在努力生产' };
   spend(state, plan.cost);
+  if (!state.base.positions[id]) state.base.positions[id] = {...position};
   const start = Math.max(now, state.construction.at(-1)?.end ?? now);
   state.construction.push({ id, level: plan.level, start, end: start + plan.seconds * 1000 });
   return { ok: true, message: `${buildingName(state, plan.building)}已加入建设队列` };
@@ -282,15 +291,18 @@ export function advanceTime(state, now = Date.now(), offline = false) {
     if (cursor >= state.world.startedAt && cursor < capEnd && state.world.auto && !state.world.survey) {
       const plan = automaticSurveyPlan(state);
       if (plan && state.resources.food >= plan.food) beginSurvey(state, plan, cursor);
-      else if (plan) surveyWake = cursor + Math.max(1, Math.ceil((plan.food - state.resources.food) / rates(state).food * 60000));
+      else if (plan && rates(state).food > 0) surveyWake = cursor + Math.max(1, Math.ceil((plan.food - state.resources.food) / rates(state).food * 60000));
     }
     const growthBoundary = cursor < capEnd && state.population < populationCap(state) ? cursor + Math.max(1, (60 - state.growthProgress) * 1000 / (hasTech(state, 'habitat') ? 2 : 1)) : Infinity;
     const worldStart = cursor < state.world.startedAt ? state.world.startedAt : Infinity;
-    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, worldStart, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
+    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, state.base.recruit[0]?.end ?? Infinity, state.base.training[0]?.end ?? Infinity, worldStart, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
     const end = Math.max(cursor, next);
     produce(state, Math.max(0, Math.min(end, capEnd) - Math.min(cursor, capEnd)) / 1000);
     cursor = end;
     let event = false;
+    if(state.base.recruit[0]?.end<=cursor){state.base.recruit.shift();state.base.workers++;messages.push('一位新农民已加入，可分配采集与施工');event=true;}
+    if(state.base.training[0]?.end<=cursor){const job=state.base.training.shift();state.base.army[job.type]++;messages.push('士兵训练完成，已加入驻守部队');event=true;}
+
     if (state.world.survey?.end <= cursor) {
       const result = completeSurvey(state);
       addResources(state, result.reward);

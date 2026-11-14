@@ -1,11 +1,13 @@
+import { BaseScene } from './base-scene.js?v=4';
+import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits} from './base.js?v=4';
 import {
   SAVE_KEY, RESOURCE_IDS, ERAS, BUILDINGS, TECHNOLOGIES, POLICIES, ROUTES, MILESTONES,
   newGame, restoreGame, capacity, populationCap, rates, buildingName, buildingPlan,
   canAfford, startBuilding, nextResearch, startResearch, expeditionPlan, startExpedition,
   collectExpedition, claimMilestone, eraRequirements, advanceEra, advanceTime, startSurvey,
-} from './engine.js?v=3';
-import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=3';
-import { LivingSettlement, WorldMap } from './scene.js?v=3';
+} from './engine.js?v=4';
+import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=4';
+import { LivingSettlement, WorldMap } from './scene.js?v=4';
 
 const PATHS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/>',
@@ -84,6 +86,8 @@ let mapMode = 'home';
 let selectedTile = WORLD.home;
 let settlementScene;
 let worldScene;
+let baseScene;
+let placement = null;
 
 function toast(message) {
   $('#toast-region').innerHTML = `<div class="toast">${escapeHtml(message)}</div>`;
@@ -145,7 +149,7 @@ function renderStats() {
 
 function coordinates(building) {
   const stone = { hall: [36, 48], farm: [58, 65], lumber: [20, 34], quarry: [58, 30], homes: [20, 67], library: [44, 78], warehouse: [30, 81], market: [71, 48], tower: [76, 74] };
-  return state.era === 0 ? stone[building.id] : [building.x, building.y];
+  return state.era === 0 ? (stone[building.id] ?? [building.x,building.y]) : [building.x, building.y];
 }
 
 function renderMap() {
@@ -193,7 +197,7 @@ function buildingPanel(id) {
   if (id === 'warehouse') effect = `<div class="effect-row">${icon('box')}全资源容量<b>${format(capacity(state))} → ${format(capacity({ ...state, buildings: { ...state.buildings, warehouse: level + 1 } }))}</b></div>`;
   if (id === 'tower') effect = `<div class="effect-row">${icon('compass')}探索补给效率<b>+${(level + 1) * 10}%</b></div>`;
   const currentJob = state.construction.find(j => j.id === id);
-  return `<div class="detail-kicker">${level ? 'SETTLEMENT BUILDING' : 'A NEW BEGINNING'}</div><h2>${buildingName(state, b)}</h2><p class="detail-subtitle">${b.description}</p><div class="building-art-wrap"><div class="building-art ${state.era === 0 ? 'is-stone' : ''}" style="background-position:${b.sprite % 3 * 50}% ${Math.floor(b.sprite / 3) * 100}%" role="img" aria-label="${buildingName(state, b)}建筑插画"></div></div><div class="level-line"><span class="level-medal"><span>${level || '+'}</span></span><small>${level ? `等级 ${level} · ${ERAS[state.era].duration}` : '尚未建成 · 等待开拓'}</small></div><div class="detail-divider">建筑效益</div>${effect}<div class="effect-row">${icon('people')}居民人口<b>${Math.floor(state.population)} / ${populationCap(state)}</b></div><div class="upgrade-preview"><span>${currentJob ? `队列已安排至 Lv.${plan.level - 1}` : level ? '下一级' : '建造所需'}</span><b>Lv.${plan.level} ${icon('arrow')}</b></div><div class="resource-cost">${costs(plan.cost)}</div><button class="primary-button" data-action="upgrade" data-id="${id}" data-afford="${id}" ${plan.locked || state.construction.length >= 3 || !canAfford(state, plan.cost) ? 'disabled' : ''}>${icon(plan.locked ? 'lock' : 'hammer')}<span>${plan.locked ? `中枢 Lv.${b.unlock} 解锁` : level ? '升级建筑' : '开始建设'}</span><small>${duration(plan.seconds)}</small></button><p class="detail-footnote">${state.construction.length ? `建设队列 ${state.construction.length} / 3 · 后续工程自动接续` : '居民会持续施工，离线期间也会推进'}</p>${chronicleHtml()}`;
+  return `<div class="detail-kicker">${level ? 'SETTLEMENT BUILDING' : 'A NEW BEGINNING'}</div><h2>${buildingName(state, b)}</h2><p class="detail-subtitle">${b.description}</p><div class="building-art-wrap"><div class="building-art ${state.era === 0 ? 'is-stone' : ''}" style="background-position:${b.sprite % 3 * 50}% ${Math.floor(b.sprite / 3) * 100}%" role="img" aria-label="${buildingName(state, b)}建筑插画"></div></div><div class="level-line"><span class="level-medal"><span>${level || '+'}</span></span><small>${level ? `等级 ${level} · ${ERAS[state.era].duration}` : '尚未建成 · 等待开拓'}</small></div><div class="detail-divider">建筑效益</div>${effect}<div class="effect-row">${icon('people')}居民人口<b>${Math.floor(state.population)} / ${populationCap(state)}</b></div><button class="secondary-button" data-action="relocate" data-id="${id}">选择位置${state.base.positions[id] ? '迁移建筑' : '建造'}</button>${id==='barracks'?'<button class="secondary-button" data-action="settlers">招募与训练军队</button>':''}<div class="upgrade-preview"><span>${currentJob ? `队列已安排至 Lv.${plan.level - 1}` : level ? '下一级' : '建造所需'}</span><b>Lv.${plan.level} ${icon('arrow')}</b></div><div class="resource-cost">${costs(plan.cost)}</div><button class="primary-button" data-action="${state.base.positions[id] ? 'upgrade' : 'place'}" data-id="${id}" data-afford="${id}" ${plan.locked || state.construction.length >= 3 || !canAfford(state, plan.cost) ? 'disabled' : ''}>${icon(plan.locked ? 'lock' : 'hammer')}<span>${plan.locked ? `中枢 Lv.${b.unlock} 解锁` : level ? '升级建筑' : '开始建设'}</span><small>${duration(plan.seconds)}</small></button><p class="detail-footnote">${state.construction.length ? `建设队列 ${state.construction.length} / 3 · 后续工程自动接续` : '居民会持续施工，离线期间也会推进'}</p>${chronicleHtml()}`;
 }
 
 function buildPanel() {
@@ -221,7 +225,9 @@ function setMapMode(mode) {
   $('#world-tools').hidden = !world;
   $('#world-map-hud').hidden = !world;
   worldScene.active = world;
-  settlementScene.active = !world;
+  settlementScene.active = false;
+  baseScene.active = !world;
+  $('#base-map-view').hidden = world;
   $('#right-sidebar').classList.remove('open');
   $('#sheet-scrim').hidden = true;
   document.querySelectorAll('[data-action="map-mode"]').forEach(button => {
@@ -257,6 +263,32 @@ function explorePanel() {
   return `<div class="detail-kicker">A WORLD WAITING TO BE DISCOVERED</div><h2>${targetName}</h2><p class="detail-subtitle">从家园出发，让足迹连成道路。<br>新发现会留在地图上，成为文明的一部分。</p><div class="world-region-card"><div class="world-region-symbol">${icon(known ? tile.icon : 'compass')}</div><h3>${known ? tile.name : '等待探索'}</h3><p>${site ? site.detail : known ? `勘探可带回${ERAS[state.era].labels[RESOURCE_IDS.indexOf(tile.resource)]}与学识` : edge ? '派遣探索者，看看雾后藏着什么。' : '先沿着已知地区，逐步抵达这里。'}</p><small>地区 ${selectedTile % WORLD.columns + 1} · ${Math.floor(selectedTile / WORLD.columns) + 1}${visited ? ' · 已勘明' : ''}</small></div>${!plan.blocked ? `<div class="research-meta"><span>${icon('wheat')} ${plan.food} 补给</span><span>${icon('clock')} ${duration(plan.seconds)}</span></div>` : ''}<button class="primary-button" data-action="survey" ${canSurvey ? '' : 'disabled'}>${icon('compass')}${world.survey ? '探索队正在赶路' : visited ? '足迹已经留在这里' : '前往这片地区'}</button><p class="detail-footnote">${status}</p><div class="world-explore-actions"><button class="secondary-button" data-action="nearby-frontier">${icon('target')}寻找附近边界</button><button class="secondary-button" data-action="follow-scout">${icon('people')}跟随探索队</button></div><div class="detail-divider">持续探索</div><button class="policy-choice ${world.auto ? 'active' : ''}" data-action="toggle-auto" aria-pressed="${world.auto}" ${isWriter ? '' : 'disabled'}>${icon('compass')}<span><strong>自动勘探${world.auto ? '已开启' : '已暂停'}</strong><small>离线时也继续前进，消耗少量食物补给</small></span></button><label class="world-direction-label" for="world-direction">优先探索方向</label><select id="world-direction" ${isWriter ? '' : 'disabled'}>${[['balanced','均衡探索'],['east','向东方前进'],['west','向西方前进'],['north','向北方前进'],['south','向南方前进']].map(([id,name]) => `<option value="${id}" ${world.direction === id ? 'selected' : ''}>${name}</option>`).join('')}</select><div class="world-discovery-summary"><span>世界已勘明</span><b>${(world.revealed.length / (WORLD.columns * WORLD.rows) * 100).toFixed(1)}%</b><small>${world.revealed.length} 个地区 · ${world.sites.length} 处资源地</small></div><p class="list-label">山地需要「青铜与筑造」，跨海需要「道路与远航」。发展文明后，探索范围会继续扩大。</p>${world.sites.length ? `<div class="detail-divider">已发现的馈赠</div>${world.sites.slice(-4).map(id => { const s = SITES[tileInfo(id).site]; return `<div class="research-done">${icon(s.icon)}<span>${s.name}</span><small>${s.detail}</small></div>`; }).join('')}` : ''}<button class="text-button" data-action="legacy-expedition">查看资源远征 ${icon('arrow')}</button>${chronicleHtml()}`;
 }
 
+function beginPlacement(id){
+  if(!isWriter)return toast('请先关闭另一游戏窗口');
+  placement=id;setMapMode('home');baseScene.begin(id);
+  $('#right-sidebar').classList.remove('open');$('#sheet-scrim').hidden=true;
+  $('#placement-hud').hidden=false;updatePlacement(baseScene.ghost);
+}
+function updatePlacement(p){
+  if(!placement)return;
+  const valid=fits(state.base,placement,p);
+  $('#placement-hud').innerHTML=`<strong>${valid?'可以建造':'位置重叠或超出范围'} · ${p.x}, ${p.y}</strong><small>点击空地调整位置，方向键可微调</small><div><button id="confirm-placement" ${valid?'':'disabled'}>确认${state.base.positions[placement]?'迁移':'建造'}</button><button id="cancel-placement">取消</button></div>`;
+  $('#confirm-placement').onclick=()=>{
+    advanceTime(state);
+    const result=state.base.positions[placement]?moveBuilding(state,placement,baseScene.ghost):startBuilding(state,placement,Date.now(),baseScene.ghost);
+    if(result.ok){baseScene.placing=null;placement=null;$('#placement-hud').hidden=true;}
+    runAction(result);
+  };
+  $('#cancel-placement').onclick=()=>{placement=null;baseScene.placing=null;$('#placement-hud').hidden=true;};
+}
+function updateWorkforceLive(){
+  document.querySelectorAll('[data-time-left]').forEach(e=>{e.textContent=duration((Number(e.dataset.timeLeft)-Date.now())/1000);});
+  const badge=$('#workforce-badge');if(badge)badge.textContent=`农民 ${state.base.workers} · 空闲 ${idleWorkers(state)} · 军队 ${armySize(state)}`;
+}
+function settlersPanel(){
+  const base=state.base;
+  return `<div class="detail-kicker">PEOPLE BUILD A CIVILIZATION</div><h2>居民与军队</h2><p class="detail-subtitle" id="workforce-badge">农民 ${base.workers} · 空闲 ${idleWorkers(state)} · 军队 ${armySize(state)}</p><div class="detail-divider">招募农民</div><p class="detail-subtitle">招募完成后，农民可分配采集与施工。可用人口 ${Math.max(0,Math.floor(state.population)-base.workers-armySize(state)-base.recruit.length-base.training.length)} 人。</p><div class="resource-cost">${costs({food:30,coin:10})}</div><button class="primary-button" data-action="recruit">招募一位农民 · 12秒</button>${base.recruit.map((j,i)=>`<p class="list-label">农民 ${i+1} · <span data-time-left="${j.end}"></span></p>`).join('')}<div class="detail-divider">调配工作</div>${Object.entries(JOBS).map(([id,name])=>`<div class="worker-job"><span>${name}</span><button data-action="job-remove" data-id="${id}" aria-label="减少${name}农民">−</button><b>${base.jobs[id]}</b><button data-action="job-add" data-id="${id}" aria-label="增加${name}农民">＋</button></div>`).join('')}<p class="detail-footnote">未分配的农民会待命。进行中的工程至少保留一名建筑工。</p><div class="detail-divider">军队训练</div>${Object.entries(TROOPS).map(([id,u])=>`<div class="route-card"><h3>${u.name} · ${base.army[id]} 人</h3><p>每名战力 ${u.power} · 需要 Lv.${u.level} 兵营</p><div class="resource-cost">${costs({food:u.food,wood:u.wood,coin:u.coin})}</div><button class="secondary-button" data-action="train" data-id="${id}" ${(state.buildings.barracks??0)<u.level?'disabled':''}>训练${u.name} · ${u.seconds}秒</button></div>`).join('')}${base.training.map(j=>`<p class="list-label">${TROOPS[j.type].name}训练中 · <span data-time-left="${j.end}"></span></p>`).join('')}<p class="list-label">驻守战力 ${Object.entries(base.army).reduce((sum,[id,n])=>sum+TROOPS[id].power*n,0)} · 训练完成后在基地巡逻</p>`;
+}
 function legacyExplorePanel() {
   if (state.expeditionReward) {
     return `<div class="detail-kicker">A GIFT FROM THE UNKNOWN</div><h2>远行的馈赠</h2><p class="detail-subtitle">${escapeHtml(state.expeditionReward.title)}。探索者已安全回到家园。</p><div class="welcome-symbol" style="text-align:center;margin:30px 0">${icon('compass')}</div><div class="resource-cost">${costs(state.expeditionReward.resources, true)}</div><button class="primary-button" data-action="collect">${icon('box')}收下这份发现</button><p class="detail-footnote">超过仓储容量的资源将无法收入，请留好空间</p>${chronicleHtml()}`;
@@ -284,21 +316,8 @@ function erasPanel() {
 }
 
 function renderPanel() {
-  const html = { world: () => buildingPanel(selected), build: buildPanel, research: researchPanel, explore: explorePanel, eras: erasPanel }[tab]();
+  const html = { settlers: settlersPanel, world: () => buildingPanel(selected), build: buildPanel, research: researchPanel, explore: explorePanel, eras: erasPanel }[tab]();
   $('#detail-panel').innerHTML = `<div class="detail-content">${html}</div>`;
-  const portrait = $('#detail-panel .building-art');
-  if (portrait && (state.era === 0 || state.era >= 3)) {
-    const [x, y] = coordinates(BUILDINGS.find(b => b.id === selected));
-    const width = portrait.clientWidth || 210;
-    const height = portrait.clientHeight || 160;
-    const imageWidth = width * 5;
-    const imageHeight = imageWidth / 1.5;
-    portrait.style.backgroundImage = `url('./assets/${ERAS[state.era].art}.webp')`;
-    portrait.style.backgroundSize = '500% auto';
-    portrait.style.backgroundPosition = `${(x / 100 * imageWidth - width / 2) / (imageWidth - width) * 100}% ${((y - 7) / 100 * imageHeight - height / 2) / (imageHeight - height) * 100}%`;
-    portrait.style.maskImage = 'radial-gradient(ellipse at center, black 42%, transparent 72%)';
-    portrait.style.filter = 'drop-shadow(0 4px 5px #57503722)';
-  }
   document.querySelectorAll('[data-tab]').forEach(button => {
     const active = button.dataset.tab === tab;
     button.classList.toggle('active', active);
@@ -351,6 +370,7 @@ function updateLive() {
   $('#build-dot').hidden = state.construction.length >= 3;
   $('#world-year').textContent = `纪元 ${Math.floor((now - state.createdAt) / 60000) + 1} 年 · ${state.era >= 5 ? `第 ${state.cycle + 1} 星域` : `${Math.floor(state.population)} 位居民`}`;
   if (!isWriter) $('#save-status').textContent = '另一窗口正在发展';
+  updateWorkforceLive();
   updateWorldHud();
   worldScene?.update();
 }
@@ -358,7 +378,7 @@ function updateLive() {
 function openPanel(nextTab = tab) {
   tab = nextTab;
   renderPanel(); updateLive();
-  if (matchMedia('(max-width:720px)').matches) {
+  if (true) {
     $('#right-sidebar').classList.add('open'); $('#sheet-scrim').hidden = false;
     $('#panel-close').focus({ preventScroll: true });
   }
@@ -380,7 +400,7 @@ function showDialog(html) {
 function closeDialog() { $('#game-dialog').close(); dialogReturnFocus?.focus?.({ preventScroll: true }); }
 
 function helpDialog() {
-  showDialog(`<span class="eyebrow">WELCOME TO DAWNLANDS</span><h2>你的文明手册</h2><p>在这片土地上，时间与想象一同流淌。</p><div class="help-item"><h3>建设与发展</h3><p>点击地图上的建筑进行升级。可提前安排三项工程，居民会依次完成。建设仓库提高资源上限，建造营帐迎接新居民。</p></div><div class="help-item"><h3>从初火到群星</h3><p>在「科技」中依次研究发现，在「纪元」查看时代目标。跨时代保留发展成果。后期研究需要数小时到数周，宇宙阶段还可持续开拓星域。</p></div><div class="help-item"><h3>离线也在生长</h3><p>离开后最多结算 24 小时资源产出，并受仓储容量限制。已经安排的建设、研究与远征按真实时间完成。自动探索会在这 24 小时内继续消耗补给、揭开地区与带回发现。存档保存在当前浏览器，清理网站数据会删除进度。</p></div><div class="help-item"><h3>探索整个世界</h3><p>切换到「世界地图」，跟随探索队逐格勘明边界。点击地区可查看收获，探索林场、矿脉和遗迹会永久增加产出。可以暂停自动探索、调整方向；研究青铜筑造与道路远航后，可以翻山渡海。地图支持拖动、缩放和方向键。场景右上角可暂停动画。</p></div><div class="help-item"><h3>发展方针</h3><p>根据眼下的需要，在民生、材料生产和均衡发展之间调整。</p><button class="secondary-button" data-action="policy">调整方针 ${icon('balance')}</button></div><div class="help-item"><h3>保管你的文明</h3><p>导出的存档可以在其他设备上导入。导入会替换本机现有进度。</p><button class="secondary-button" data-action="export">导出存档</button><button class="secondary-button" data-action="import">导入存档</button><input type="file" id="save-import" accept="application/json,.json" hidden></div><button class="text-button danger-button" data-action="reset-prompt">重新建立文明</button>`);
+  showDialog(`<span class="eyebrow">WELCOME TO DAWNLANDS</span><h2>你的文明手册</h2><p>在这片土地上，时间与想象一同流淌。</p><div class="help-item"><h3>自由建设与居民</h3><p>在建设中选建筑，点击地图空地选址后确认。建筑可迁移；居民面板可招募农民、调配工作和训练士兵。地图支持双指缩放、拖动和缩放按钮。点击地图上的建筑进行升级。可提前安排三项工程，居民会依次完成。建设仓库提高资源上限，建造营帐迎接新居民。</p></div><div class="help-item"><h3>从初火到群星</h3><p>在「科技」中依次研究发现，在「纪元」查看时代目标。跨时代保留发展成果。后期研究需要数小时到数周，宇宙阶段还可持续开拓星域。</p></div><div class="help-item"><h3>离线也在生长</h3><p>离开后最多结算 24 小时资源产出，并受仓储容量限制。已经安排的建设、研究与远征按真实时间完成。自动探索会在这 24 小时内继续消耗补给、揭开地区与带回发现。存档保存在当前浏览器，清理网站数据会删除进度。</p></div><div class="help-item"><h3>探索整个世界</h3><p>切换到「世界地图」，跟随探索队逐格勘明边界。点击地区可查看收获，探索林场、矿脉和遗迹会永久增加产出。可以暂停自动探索、调整方向；研究青铜筑造与道路远航后，可以翻山渡海。地图支持拖动、缩放和方向键。场景右上角可暂停动画。</p></div><div class="help-item"><h3>发展方针</h3><p>根据眼下的需要，在民生、材料生产和均衡发展之间调整。</p><button class="secondary-button" data-action="policy">调整方针 ${icon('balance')}</button></div><div class="help-item"><h3>保管你的文明</h3><p>导出的存档可以在其他设备上导入。导入会替换本机现有进度。</p><button class="secondary-button" data-action="export">导出存档</button><button class="secondary-button" data-action="import">导入存档</button><input type="file" id="save-import" accept="application/json,.json" hidden></div><button class="text-button danger-button" data-action="reset-prompt">重新建立文明</button>`);
 }
 
 function policyDialog() {
@@ -409,7 +429,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const { action, id } = button.dataset;
-  const readActions = ['select', 'build', 'eras', 'policy', 'dismiss', 'export', 'import', 'reset-prompt', 'preview-era', 'map-mode', 'follow-scout', 'fit-world', 'nearby-frontier', 'legacy-expedition'];
+  const readActions = ['select', 'build', 'eras', 'policy', 'dismiss', 'export', 'import', 'reset-prompt', 'preview-era', 'map-mode', 'follow-scout', 'fit-world', 'nearby-frontier', 'legacy-expedition','place','relocate','settlers'];
   if (!isWriter && !readActions.includes(action)) return toast('这份文明已在另一个窗口打开，请先关闭那个窗口');
   if (isWriter) advanceTime(state);
   switch (action) {
@@ -423,7 +443,13 @@ document.addEventListener('click', event => {
     case 'legacy-expedition': showDialog(legacyExplorePanel()); break;
     case 'build': openPanel('build'); break;
     case 'eras': openPanel('eras'); break;
-    case 'upgrade': runAction(startBuilding(state, id)); break;
+    case 'upgrade': if(!state.base.positions[id]) beginPlacement(id);else runAction(startBuilding(state,id)); break;
+    case 'place': case 'relocate': beginPlacement(id); break;
+    case 'settlers': openPanel('settlers'); break;
+    case 'job-add': runAction(assignJob(state,id,1));break;
+    case 'job-remove': runAction(assignJob(state,id,-1));break;
+    case 'recruit': runAction(recruitFarmer(state));break;
+    case 'train': runAction(trainTroop(state,id));break;
     case 'research': runAction(startResearch(state)); break;
     case 'expedition': runAction(startExpedition(state, id)); break;
     case 'collect': runAction(collectExpedition(state)); break;
@@ -488,13 +514,13 @@ function updateCamera() {
   camera.x = Math.min(maxX, Math.max(-maxX, camera.x)); camera.y = Math.min(maxY, Math.max(-maxY, camera.y));
   scene.style.transform = `translate(calc(-50% + ${camera.x}px), calc(-50% + ${camera.y}px)) scale(${zoom})`;
 }
-$('#zoom-in').addEventListener('click', () => { if (mapMode === 'world') return worldScene.zoomBy(1.2); zoom = Math.min(1.8, zoom + .2); updateCamera(); });
-$('#zoom-out').addEventListener('click', () => { if (mapMode === 'world') return worldScene.zoomBy(.8); zoom = Math.max(.8, zoom - .2); updateCamera(); });
-$('#map-home').addEventListener('click', () => { if (mapMode === 'world') return worldScene.home(); zoom = 1; camera = { x: 0, y: 0 }; updateCamera(); });
+$('#zoom-in').addEventListener('click', () => { if (mapMode === 'world') return worldScene.zoomBy(1.2); return baseScene.zoomBy(1.2); });
+$('#zoom-out').addEventListener('click', () => { if (mapMode === 'world') return worldScene.zoomBy(.8); return baseScene.zoomBy(.8); });
+$('#map-home').addEventListener('click', () => { if (mapMode === 'world') return worldScene.home(); return baseScene.home(); });
 new ResizeObserver(sizeMap).observe($('#map-viewport'));
 let drag;
 $('#map-viewport').addEventListener('pointerdown', event => {
-  if (mapMode === 'world' || event.target.closest('button')) return;
+  if (event.target.closest('canvas') || mapMode === 'world' || event.target.closest('button')) return;
   drag = { x: event.clientX, y: event.clientY, cameraX: camera.x, cameraY: camera.y };
   $('#map-viewport').setPointerCapture(event.pointerId);
 });
@@ -554,8 +580,10 @@ worldScene = new WorldMap($('#world-canvas'), () => state, id => { selectedTile 
 $('#motion-toggle').setAttribute('aria-pressed', String(settlementScene.paused));
 $('#motion-toggle').textContent = settlementScene.paused ? '▷' : 'Ⅱ';
 $('#motion-toggle').setAttribute('aria-label', settlementScene.paused ? '恢复场景动画' : '暂停场景动画');
-$('#motion-toggle').addEventListener('click', () => { const paused = !settlementScene.paused; settlementScene.paused = paused; worldScene.paused = paused; $('#motion-toggle').textContent = paused ? '▷' : 'Ⅱ'; $('#motion-toggle').setAttribute('aria-pressed', String(paused)); $('#motion-toggle').setAttribute('aria-label', paused ? '恢复场景动画' : '暂停场景动画'); });
-fillIcons(); renderAll(); sizeMap(); acquireWriter();
+$('#motion-toggle').addEventListener('click', () => { const paused = !settlementScene.paused; settlementScene.paused = paused; worldScene.paused = paused; baseScene.paused = paused; $('#motion-toggle').textContent = paused ? '▷' : 'Ⅱ'; $('#motion-toggle').setAttribute('aria-pressed', String(paused)); $('#motion-toggle').setAttribute('aria-label', paused ? '恢复场景动画' : '暂停场景动画'); });
+baseScene = new BaseScene($('#base-canvas'),()=>state,id=>{selected=id;openPanel('world');},p=>updatePlacement(p));
+settlementScene.active=false;
+fillIcons(); renderAll(); sizeMap(); baseScene.resize(); baseScene.home(); acquireWriter();
 if (!navigator.locks) { save(); showOffline(offlineReport); }
 setInterval(() => {
   if (!isWriter || document.hidden) return;

@@ -1,4 +1,4 @@
-import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=3';
+import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=4';
 
 const TAU = Math.PI * 2;
 function ellipse(ctx, x, y, rx, ry, color) {
@@ -281,20 +281,21 @@ export class WorldMap {
     return [id, ...neighbors(id)].sort((a, b) => { const p = tilePoint(a), q = tilePoint(b); return Math.hypot(p.x - worldX, p.y - worldY) - Math.hypot(q.x - worldX, q.y - worldY); })[0];
   }
   bindInput() {
-    let drag = null;
-    this.canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, cx: this.camera.x, cy: this.camera.y }; this.canvas.setPointerCapture(e.pointerId); });
+    let drag = null; const fingers=new Map();let pinch=null;
+    this.canvas.addEventListener('pointerdown', e => { fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(fingers.size===2){const [a,b]=[...fingers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:this.camera.zoom};drag=null;this.canvas.setPointerCapture(e.pointerId);return;} drag = { x: e.clientX, y: e.clientY, cx: this.camera.x, cy: this.camera.y }; this.canvas.setPointerCapture(e.pointerId); });
     this.canvas.addEventListener('pointermove', e => {
+      if(fingers.has(e.pointerId))fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(fingers.size===2&&pinch){const [a,b]=[...fingers.values()];this.camera.zoom=Math.max(.15,Math.min(2.5,pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d));return;}
       if (!drag) return;
       if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
       this.following = false;
       this.camera.x = Math.max(-100, Math.min(WORLD.width + 100, drag.cx - (e.clientX - drag.x) / this.camera.zoom));
       this.camera.y = Math.max(-100, Math.min(WORLD.height + 100, drag.cy - (e.clientY - drag.y) / this.camera.zoom));
     });
-    this.canvas.addEventListener('pointerup', e => {
+    this.canvas.addEventListener('pointerup', e => { fingers.delete(e.pointerId);if(pinch){if(!fingers.size)pinch=null;drag=null;return;}
       if (drag && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 7) { const box = this.canvas.getBoundingClientRect(); this.selected = this.pick(e.clientX - box.left, e.clientY - box.top); this.onSelect(this.selected); }
       drag = null;
     });
-    this.canvas.addEventListener('pointercancel', () => { drag = null; });
+    this.canvas.addEventListener('pointercancel', () => { drag = null;fingers.clear();pinch=null; });
     this.canvas.addEventListener('wheel', e => { if (!this.active) return; e.preventDefault(); this.zoomBy(e.deltaY > 0 ? .9 : 1.1); }, { passive: false });
     this.canvas.addEventListener('keydown', e => {
       const deltas = { ArrowLeft: [-60, 0], ArrowRight: [60, 0], ArrowUp: [0, -60], ArrowDown: [0, 60] };
