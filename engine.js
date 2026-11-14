@@ -1,5 +1,6 @@
-import { newBase, restoreBase, fits } from './base.js?v=4';
-import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=4';
+import {finishClearing} from './frontier.js?v=5';
+import { newBase, restoreBase, fits } from './base.js?v=5';
+import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=5';
 
 export const SAVE_KEY = 'xiyuan.civilization.v1';
 export const RESOURCE_IDS = ['wood', 'stone', 'food', 'coin', 'knowledge'];
@@ -17,7 +18,7 @@ export const ERAS = [
 ];
 
 export const BUILDINGS = [
-  { id: 'hall', name: '部落议事厅', later: '文明中枢', icon: 'hall', sprite: 0, x: 47, y: 45, description: '文明的心脏。提升聚落等级，解锁新的建筑与时代。', cost: { wood: 70, stone: 55, food: 30 }, seconds: 20, unlock: 1 },
+  { id: 'hall', name: '初始营地', later: '文明中枢', icon: 'hall', sprite: 0, x: 47, y: 45, description: '文明的心脏。提升聚落等级，解锁新的建筑与时代。', cost: { wood: 70, stone: 55, food: 30 }, seconds: 20, unlock: 1 },
   { id: 'farm', name: '采集营地', later: '生态供给站', icon: 'wheat', sprite: 1, x: 59, y: 59, description: '从森林采集到规模耕作，稳定的食物让更多人留下。', cost: { wood: 35, stone: 15 }, seconds: 12, unlock: 1, resource: 'food', rate: 16 },
   { id: 'lumber', name: '伐木营地', later: '材料工坊', icon: 'wood', sprite: 2, x: 31, y: 35, description: '把自然的馈赠转化为建设材料，让每一份蓝图落地。', cost: { wood: 30, stone: 20 }, seconds: 14, unlock: 1, resource: 'wood', rate: 14 },
   { id: 'quarry', name: '采石场', later: '矿物提炼厂', icon: 'stone', sprite: 3, x: 61, y: 29, description: '凿开岩壁，积累坚实的基础材料。', cost: { wood: 40, stone: 15 }, seconds: 16, unlock: 1, resource: 'stone', rate: 11 },
@@ -111,6 +112,7 @@ export function populationCap(state) { return 16 + state.buildings.homes * 8; }
 export function hasTech(state, id) { return state.technologies.includes(id); }
 export function buildingName(state, building) {
   if (state.era >= 4) return building.later;
+  if (state.era===0) return ({hall:'初始营地',farm:'采集营棚',lumber:'伐木营棚',quarry:'采石营地',homes:'兽皮营帐',library:'智者营帐',warehouse:'储物棚',market:'交换营地',tower:'瞭望营地',barracks:'战士营地'})[building.id];
   if (state.era >= 1 && building.id === 'farm') return '河畔农庄';
   if (state.era >= 1 && building.id === 'hall') return '城镇议事厅';
   if (state.era >= 1 && building.id === 'homes') return '河谷民居';
@@ -295,11 +297,12 @@ export function advanceTime(state, now = Date.now(), offline = false) {
     }
     const growthBoundary = cursor < capEnd && state.population < populationCap(state) ? cursor + Math.max(1, (60 - state.growthProgress) * 1000 / (hasTech(state, 'habitat') ? 2 : 1)) : Infinity;
     const worldStart = cursor < state.world.startedAt ? state.world.startedAt : Infinity;
-    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, state.base.recruit[0]?.end ?? Infinity, state.base.training[0]?.end ?? Infinity, worldStart, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
+    const next = Math.min(now, state.construction[0]?.end ?? Infinity, state.research?.end ?? Infinity, state.expedition?.end ?? Infinity, state.world.survey?.end ?? Infinity, state.base.recruit[0]?.end ?? Infinity, state.base.training[0]?.end ?? Infinity, state.base.clearing?.end ?? Infinity, worldStart, surveyWake, growthBoundary, cursor < capEnd ? capEnd : Infinity);
     const end = Math.max(cursor, next);
     produce(state, Math.max(0, Math.min(end, capEnd) - Math.min(cursor, capEnd)) / 1000);
     cursor = end;
     let event = false;
+    if(state.base.clearing?.end<=cursor){const reward=finishClearing(state);addResources(state,reward);messages.push('拓荒完成：获得资源并解锁一格建设用地');event=true;}
     if(state.base.recruit[0]?.end<=cursor){state.base.recruit.shift();state.base.workers++;messages.push('一位新农民已加入，可分配采集与施工');event=true;}
     if(state.base.training[0]?.end<=cursor){const job=state.base.training.shift();state.base.army[job.type]++;messages.push('士兵训练完成，已加入驻守部队');event=true;}
 

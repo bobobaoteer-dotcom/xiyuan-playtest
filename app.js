@@ -1,13 +1,14 @@
-import { BaseScene } from './base-scene.js?v=4';
-import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits} from './base.js?v=4';
+import { BaseScene } from './base-scene.js?v=5';
+import {OBSTACLES,terrainAt,isCleared,canClear,startClearing} from './frontier.js?v=5';
+import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits} from './base.js?v=5';
 import {
   SAVE_KEY, RESOURCE_IDS, ERAS, BUILDINGS, TECHNOLOGIES, POLICIES, ROUTES, MILESTONES,
   newGame, restoreGame, capacity, populationCap, rates, buildingName, buildingPlan,
   canAfford, startBuilding, nextResearch, startResearch, expeditionPlan, startExpedition,
   collectExpedition, claimMilestone, eraRequirements, advanceEra, advanceTime, startSurvey,
-} from './engine.js?v=4';
-import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=4';
-import { LivingSettlement, WorldMap } from './scene.js?v=4';
+} from './engine.js?v=5';
+import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=5';
+import { LivingSettlement, WorldMap } from './scene.js?v=5';
 
 const PATHS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/>',
@@ -88,6 +89,25 @@ let settlementScene;
 let worldScene;
 let baseScene;
 let placement = null;
+let selectedTerrain = {x:17,y:12};
+
+function terrainPanel(){
+  const {x,y}=selectedTerrain, clear=isCleared(state.base,x,y), obstacle=OBSTACLES[terrainAt(x,y)], job=state.base.clearing;
+  const error=canClear(state,x,y), running=job?.x===x&&job?.y===y;
+  return `<div class="detail-kicker">BEYOND THE CAMPFIRE</div><h2>${clear?'已开垦空地':obstacle.name}</h2><p class="detail-subtitle">营地坐标 ${x}, ${y} · 已开垦 ${state.base.cleared.length} 格</p><div class="terrain-symbol">${icon(clear?'leaf':obstacle.icon)}</div><p class="detail-subtitle">${clear?'这片土地已经可以建设。选择蓝图，再到地图上安排位置。':obstacle.description}</p>${clear?'<button class="primary-button" data-action="build">选择建筑蓝图</button>':running?`<div class="detail-divider">农民正在拓荒</div><div class="progress-track"><span class="progress-fill" data-progress-start="${job.start}" data-progress-end="${job.end}"></span></div><p class="detail-footnote">剩余 <span data-countdown="${job.end}"></span> · 离线也会完成</p>`:`<div class="detail-divider">清理后获得</div><div class="resource-cost">${costs(obstacle.reward,true)}</div><div class="research-meta"><span>${icon('wheat')} ${obstacle.food} 食物</span><span>${icon('clock')} ${obstacle.seconds} 秒</span></div><button class="primary-button" data-action="clear-land" ${error||job?'disabled':''}>${icon('hammer')}派一位农民拓荒</button><p class="detail-footnote">${error??(job?'另一块土地正在清理':'优先调派空闲农民，也可临时调回采集者。完成后自动恢复原工作。')}</p>`}<div class="detail-divider">逐步扩展营地</div><p class="detail-subtitle">只能清理与营地相邻的地块。森林和石堆清除后会永久消失，留下可以自由选址的土地。</p>`;
+}
+
+function buildingControls(id){
+  if(!state.buildings[id])return '';
+  const job={farm:'food',lumber:'wood',quarry:'stone'}[id];
+  if(job)return `<div class="detail-divider">此处的农民</div><div class="worker-job"><span>${JOBS[job]}</span><button data-action="job-remove" data-id="${job}" aria-label="减少${JOBS[job]}农民">−</button><b>${state.base.jobs[job]}</b><button data-action="job-add" data-id="${job}" aria-label="增加${JOBS[job]}农民">＋</button></div><p class="detail-footnote">空闲农民 ${idleWorkers(state)} 人 · 采集产出计入顶部资源</p>`;
+  if(id==='hall'||id==='homes')return `<div class="detail-divider">营地居民</div><p class="detail-subtitle">农民 ${state.base.workers} 人 · 空闲 ${idleWorkers(state)} 人</p><button class="secondary-button" data-action="recruit">招募农民 · 30食物 / 10财富 · 12秒</button><button class="secondary-button" data-action="settlers">管理居民与分配工作</button>`;
+  if(id==='library')return '<button class="secondary-button" data-action="research-panel">研究新的知识</button>';
+  if(id==='barracks')return `<div class="detail-divider">战士训练</div>${Object.entries(TROOPS).map(([type,u])=>`<button class="secondary-button" data-action="train" data-id="${type}" ${state.buildings.barracks<u.level?'disabled':''}>训练${u.name} · ${u.seconds}秒${state.buildings.barracks<u.level?' · 需Lv.'+u.level:''}</button>`).join('')}<button class="secondary-button" data-action="settlers">查看军队与训练队列</button>`;
+  if(id==='tower')return '<button class="secondary-button" data-action="map-mode" data-id="world">查看世界与探索队</button>';
+  if(id==='market')return '<button class="secondary-button" data-action="policy">调整聚落发展方针</button>';
+  return `<p class="detail-footnote">当前每种资源可储存 ${format(capacity(state))}。升级可扩大仓储。</p>`;
+}
 
 function toast(message) {
   $('#toast-region').innerHTML = `<div class="toast">${escapeHtml(message)}</div>`;
@@ -197,7 +217,9 @@ function buildingPanel(id) {
   if (id === 'warehouse') effect = `<div class="effect-row">${icon('box')}全资源容量<b>${format(capacity(state))} → ${format(capacity({ ...state, buildings: { ...state.buildings, warehouse: level + 1 } }))}</b></div>`;
   if (id === 'tower') effect = `<div class="effect-row">${icon('compass')}探索补给效率<b>+${(level + 1) * 10}%</b></div>`;
   const currentJob = state.construction.find(j => j.id === id);
-  return `<div class="detail-kicker">${level ? 'SETTLEMENT BUILDING' : 'A NEW BEGINNING'}</div><h2>${buildingName(state, b)}</h2><p class="detail-subtitle">${b.description}</p><div class="building-art-wrap"><div class="building-art ${state.era === 0 ? 'is-stone' : ''}" style="background-position:${b.sprite % 3 * 50}% ${Math.floor(b.sprite / 3) * 100}%" role="img" aria-label="${buildingName(state, b)}建筑插画"></div></div><div class="level-line"><span class="level-medal"><span>${level || '+'}</span></span><small>${level ? `等级 ${level} · ${ERAS[state.era].duration}` : '尚未建成 · 等待开拓'}</small></div><div class="detail-divider">建筑效益</div>${effect}<div class="effect-row">${icon('people')}居民人口<b>${Math.floor(state.population)} / ${populationCap(state)}</b></div><button class="secondary-button" data-action="relocate" data-id="${id}">选择位置${state.base.positions[id] ? '迁移建筑' : '建造'}</button>${id==='barracks'?'<button class="secondary-button" data-action="settlers">招募与训练军队</button>':''}<div class="upgrade-preview"><span>${currentJob ? `队列已安排至 Lv.${plan.level - 1}` : level ? '下一级' : '建造所需'}</span><b>Lv.${plan.level} ${icon('arrow')}</b></div><div class="resource-cost">${costs(plan.cost)}</div><button class="primary-button" data-action="${state.base.positions[id] ? 'upgrade' : 'place'}" data-id="${id}" data-afford="${id}" ${plan.locked || state.construction.length >= 3 || !canAfford(state, plan.cost) ? 'disabled' : ''}>${icon(plan.locked ? 'lock' : 'hammer')}<span>${plan.locked ? `中枢 Lv.${b.unlock} 解锁` : level ? '升级建筑' : '开始建设'}</span><small>${duration(plan.seconds)}</small></button><p class="detail-footnote">${state.construction.length ? `建设队列 ${state.construction.length} / 3 · 后续工程自动接续` : '居民会持续施工，离线期间也会推进'}</p>${chronicleHtml()}`;
+  const sprite=state.era===0?({hall:0,farm:1,lumber:2,quarry:3,homes:4,library:5,warehouse:2,market:4,tower:0,barracks:4})[id]:b.sprite;
+  const artStyle=state.era===0?`background-image:url(./assets/stone-atlas.webp);background-size:300% 300%;background-position:${sprite%3*50}% ${Math.floor(sprite/3)*50}%`:`background-position:${sprite%3*50}% ${Math.floor(sprite/3)*100}%`;
+  return `<div class="detail-kicker">${level ? 'SETTLEMENT BUILDING' : 'A NEW BEGINNING'}</div><h2>${buildingName(state, b)}</h2><p class="detail-subtitle">${b.description}</p><div class="building-art-wrap"><div class="building-art ${state.era === 0 ? 'is-stone' : ''}" style="${artStyle}" role="img" aria-label="${buildingName(state, b)}建筑插画"></div></div><div class="level-line"><span class="level-medal"><span>${level || '+'}</span></span><small>${level ? `等级 ${level} · ${ERAS[state.era].duration}` : '尚未建成 · 等待开拓'}</small></div><div class="detail-divider">建筑效益</div>${effect}<div class="effect-row">${icon('people')}居民人口<b>${Math.floor(state.population)} / ${populationCap(state)}</b></div><button class="secondary-button" data-action="relocate" data-id="${id}">选择位置${state.base.positions[id] ? '迁移建筑' : '建造'}</button>${buildingControls(id)}<div class="upgrade-preview"><span>${currentJob ? `队列已安排至 Lv.${plan.level - 1}` : level ? '下一级' : '建造所需'}</span><b>Lv.${plan.level} ${icon('arrow')}</b></div><div class="resource-cost">${costs(plan.cost)}</div><button class="primary-button" data-action="${state.base.positions[id] ? 'upgrade' : 'place'}" data-id="${id}" data-afford="${id}" ${plan.locked || state.construction.length >= 3 || !canAfford(state, plan.cost) ? 'disabled' : ''}>${icon(plan.locked ? 'lock' : 'hammer')}<span>${plan.locked ? `中枢 Lv.${b.unlock} 解锁` : level ? '升级建筑' : '开始建设'}</span><small>${duration(plan.seconds)}</small></button><p class="detail-footnote">${state.construction.length ? `建设队列 ${state.construction.length} / 3 · 后续工程自动接续` : '居民会持续施工，离线期间也会推进'}</p>${chronicleHtml()}`;
 }
 
 function buildPanel() {
@@ -272,7 +294,7 @@ function beginPlacement(id){
 function updatePlacement(p){
   if(!placement)return;
   const valid=fits(state.base,placement,p);
-  $('#placement-hud').innerHTML=`<strong>${valid?'可以建造':'位置重叠或超出范围'} · ${p.x}, ${p.y}</strong><small>点击空地调整位置，方向键可微调</small><div><button id="confirm-placement" ${valid?'':'disabled'}>确认${state.base.positions[placement]?'迁移':'建造'}</button><button id="cancel-placement">取消</button></div>`;
+  $('#placement-hud').innerHTML=`<strong>${valid?'可以建造':'需先拓荒，或位置已被占用'} · ${p.x}, ${p.y}</strong><small>在已开垦空地选址；取消后点击树林、石堆可拓荒</small><div><button id="confirm-placement" ${valid?'':'disabled'}>确认${state.base.positions[placement]?'迁移':'建造'}</button><button id="cancel-placement">取消</button></div>`;
   $('#confirm-placement').onclick=()=>{
     advanceTime(state);
     const result=state.base.positions[placement]?moveBuilding(state,placement,baseScene.ghost):startBuilding(state,placement,Date.now(),baseScene.ghost);
@@ -316,7 +338,7 @@ function erasPanel() {
 }
 
 function renderPanel() {
-  const html = { settlers: settlersPanel, world: () => buildingPanel(selected), build: buildPanel, research: researchPanel, explore: explorePanel, eras: erasPanel }[tab]();
+  const html = { terrain: terrainPanel, settlers: settlersPanel, world: () => buildingPanel(selected), build: buildPanel, research: researchPanel, explore: explorePanel, eras: erasPanel }[tab]();
   $('#detail-panel').innerHTML = `<div class="detail-content">${html}</div>`;
   document.querySelectorAll('[data-tab]').forEach(button => {
     const active = button.dataset.tab === tab;
@@ -327,8 +349,9 @@ function renderPanel() {
 
 function renderQueue() {
   const job = state.construction[0];
+  if(!job&&state.base.clearing){const c=state.base.clearing;$('#construction-strip').innerHTML=`<span class="queue-icon">${icon('wood')}</span><div class="queue-body"><div class="queue-top"><strong>农民正在拓荒 · ${c.x}, ${c.y}</strong><small data-countdown="${c.end}"></small></div><div class="progress-track"><span class="progress-fill" data-progress-start="${c.start}" data-progress-end="${c.end}"></span></div></div><button class="queue-idle-action" data-action="inspect-clearing">查看</button>`;return;}
   if (!job) {
-    $('#construction-strip').innerHTML = `<span class="queue-icon">${icon('hammer')}</span><div class="queue-body"><strong>每一份蓝图，都通向未来</strong><p>工匠已准备好，选择一座建筑开始建设</p></div><button class="queue-idle-action" data-action="build">去建设 ${icon('chevron')}</button>`;
+    $('#construction-strip').innerHTML = `<span class="queue-icon">${icon('hammer')}</span><div class="queue-body"><strong>篝火之外，世界仍待开拓</strong><p>点击树林或石堆，派农民清出建设用地</p></div><button class="queue-idle-action" data-action="build">去建设 ${icon('chevron')}</button>`;
     return;
   }
   const building = BUILDINGS.find(b => b.id === job.id);
@@ -400,7 +423,7 @@ function showDialog(html) {
 function closeDialog() { $('#game-dialog').close(); dialogReturnFocus?.focus?.({ preventScroll: true }); }
 
 function helpDialog() {
-  showDialog(`<span class="eyebrow">WELCOME TO DAWNLANDS</span><h2>你的文明手册</h2><p>在这片土地上，时间与想象一同流淌。</p><div class="help-item"><h3>自由建设与居民</h3><p>在建设中选建筑，点击地图空地选址后确认。建筑可迁移；居民面板可招募农民、调配工作和训练士兵。地图支持双指缩放、拖动和缩放按钮。点击地图上的建筑进行升级。可提前安排三项工程，居民会依次完成。建设仓库提高资源上限，建造营帐迎接新居民。</p></div><div class="help-item"><h3>从初火到群星</h3><p>在「科技」中依次研究发现，在「纪元」查看时代目标。跨时代保留发展成果。后期研究需要数小时到数周，宇宙阶段还可持续开拓星域。</p></div><div class="help-item"><h3>离线也在生长</h3><p>离开后最多结算 24 小时资源产出，并受仓储容量限制。已经安排的建设、研究与远征按真实时间完成。自动探索会在这 24 小时内继续消耗补给、揭开地区与带回发现。存档保存在当前浏览器，清理网站数据会删除进度。</p></div><div class="help-item"><h3>探索整个世界</h3><p>切换到「世界地图」，跟随探索队逐格勘明边界。点击地区可查看收获，探索林场、矿脉和遗迹会永久增加产出。可以暂停自动探索、调整方向；研究青铜筑造与道路远航后，可以翻山渡海。地图支持拖动、缩放和方向键。场景右上角可暂停动画。</p></div><div class="help-item"><h3>发展方针</h3><p>根据眼下的需要，在民生、材料生产和均衡发展之间调整。</p><button class="secondary-button" data-action="policy">调整方针 ${icon('balance')}</button></div><div class="help-item"><h3>保管你的文明</h3><p>导出的存档可以在其他设备上导入。导入会替换本机现有进度。</p><button class="secondary-button" data-action="export">导出存档</button><button class="secondary-button" data-action="import">导入存档</button><input type="file" id="save-import" accept="application/json,.json" hidden></div><button class="text-button danger-button" data-action="reset-prompt">重新建立文明</button>`);
+  showDialog(`<span class="eyebrow">WELCOME TO DAWNLANDS</span><h2>你的文明手册</h2><p>在这片土地上，时间与想象一同流淌。</p><div class="help-item"><h3>自由建设与居民</h3><p>从一座石器营地开始。点击与营地相邻的森林或石堆，派农民拓荒，完成后这块土地才能建造。拓荒完成会获得木材或石料，农民恢复原来的工作。在建设中选建筑，点击已开垦空地选址后确认。建筑可迁移；居民面板可招募农民、调配工作和训练士兵。地图支持双指缩放、拖动和缩放按钮。点击地图上的建筑进行升级。可提前安排三项工程，居民会依次完成。建设仓库提高资源上限，建造营帐迎接新居民。</p></div><div class="help-item"><h3>从初火到群星</h3><p>在「科技」中依次研究发现，在「纪元」查看时代目标。跨时代保留发展成果。后期研究需要数小时到数周，宇宙阶段还可持续开拓星域。</p></div><div class="help-item"><h3>离线也在生长</h3><p>离开后最多结算 24 小时资源产出，并受仓储容量限制。已经安排的建设、研究与远征按真实时间完成。自动探索会在这 24 小时内继续消耗补给、揭开地区与带回发现。存档保存在当前浏览器，清理网站数据会删除进度。</p></div><div class="help-item"><h3>探索整个世界</h3><p>切换到「世界地图」，跟随探索队逐格勘明边界。点击地区可查看收获，探索林场、矿脉和遗迹会永久增加产出。可以暂停自动探索、调整方向；研究青铜筑造与道路远航后，可以翻山渡海。地图支持拖动、缩放和方向键。场景右上角可暂停动画。</p></div><div class="help-item"><h3>发展方针</h3><p>根据眼下的需要，在民生、材料生产和均衡发展之间调整。</p><button class="secondary-button" data-action="policy">调整方针 ${icon('balance')}</button></div><div class="help-item"><h3>保管你的文明</h3><p>导出的存档可以在其他设备上导入。导入会替换本机现有进度。</p><button class="secondary-button" data-action="export">导出存档</button><button class="secondary-button" data-action="import">导入存档</button><input type="file" id="save-import" accept="application/json,.json" hidden></div><button class="text-button danger-button" data-action="reset-prompt">重新建立文明</button>`);
 }
 
 function policyDialog() {
@@ -448,6 +471,9 @@ document.addEventListener('click', event => {
     case 'settlers': openPanel('settlers'); break;
     case 'job-add': runAction(assignJob(state,id,1));break;
     case 'job-remove': runAction(assignJob(state,id,-1));break;
+    case 'clear-land': runAction(startClearing(state,selectedTerrain.x,selectedTerrain.y));break;
+    case 'inspect-clearing': if(state.base.clearing){selectedTerrain={x:state.base.clearing.x,y:state.base.clearing.y};baseScene.terrainSelected=selectedTerrain;openPanel('terrain');}break;
+    case 'research-panel': openPanel('research');break;
     case 'recruit': runAction(recruitFarmer(state));break;
     case 'train': runAction(trainTroop(state,id));break;
     case 'research': runAction(startResearch(state)); break;
@@ -581,7 +607,7 @@ $('#motion-toggle').setAttribute('aria-pressed', String(settlementScene.paused))
 $('#motion-toggle').textContent = settlementScene.paused ? '▷' : 'Ⅱ';
 $('#motion-toggle').setAttribute('aria-label', settlementScene.paused ? '恢复场景动画' : '暂停场景动画');
 $('#motion-toggle').addEventListener('click', () => { const paused = !settlementScene.paused; settlementScene.paused = paused; worldScene.paused = paused; baseScene.paused = paused; $('#motion-toggle').textContent = paused ? '▷' : 'Ⅱ'; $('#motion-toggle').setAttribute('aria-pressed', String(paused)); $('#motion-toggle').setAttribute('aria-label', paused ? '恢复场景动画' : '暂停场景动画'); });
-baseScene = new BaseScene($('#base-canvas'),()=>state,id=>{selected=id;openPanel('world');},p=>updatePlacement(p));
+baseScene = new BaseScene($('#base-canvas'),()=>state,id=>{selected=id;openPanel('world');},p=>updatePlacement(p),p=>{selectedTerrain=p;baseScene.terrainSelected=p;openPanel('terrain');});
 settlementScene.active=false;
 fillIcons(); renderAll(); sizeMap(); baseScene.resize(); baseScene.home(); acquireWriter();
 if (!navigator.locks) { save(); showOffline(offlineReport); }

@@ -1,20 +1,23 @@
+import {initialClearing,isCleared,restoreFrontier} from './frontier.js?v=5';
 export const GRID = 24;
 export const FOOTPRINT = { hall:3, farm:3, lumber:2, quarry:2, homes:2, library:3, warehouse:2, market:3, tower:2, barracks:3 };
 export const DEFAULT_POSITIONS = { hall:[11,11],farm:[15,11],lumber:[7,10],quarry:[11,6],homes:[8,15],library:[15,15],warehouse:[5,14],market:[16,6],tower:[6,5],barracks:[11,17] };
 export const JOBS = {wood:'砍树',stone:'挖矿',food:'采集食物',builder:'施工'};
 export const TROOPS = { militia:{name:'长矛兵',food:40,wood:15,coin:12,seconds:20,level:1,power:10},archer:{name:'弓箭手',food:45,wood:30,coin:20,seconds:30,level:2,power:16} };
 export function newBase(buildings) {
-  return {positions:Object.fromEntries(Object.keys(buildings).filter(id=>buildings[id]>0).map(id=>[id,{x:DEFAULT_POSITIONS[id][0],y:DEFAULT_POSITIONS[id][1]}])),workers:3,jobs:{wood:1,stone:1,food:0,builder:1},recruit:[],training:[],army:{militia:0,archer:0}};
+  return {cleared:initialClearing(),clearing:null,positions:Object.fromEntries(Object.keys(buildings).filter(id=>buildings[id]>0).map(id=>[id,{x:DEFAULT_POSITIONS[id][0],y:DEFAULT_POSITIONS[id][1]}])),workers:3,jobs:{wood:1,stone:1,food:0,builder:1},recruit:[],training:[],army:{militia:0,archer:0}};
 }
 export function fits(base,id,p) {
   const n=FOOTPRINT[id];
-  if(!n||!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)||p.x<3||p.y<3||p.x+n>19||p.y+n>19)return false;
+  if(!n||!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)||p.x<3||p.y<3||p.x+n>21||p.y+n>21)return false;
+  for(let y=p.y;y<p.y+n;y++)for(let x=p.x;x<p.x+n;x++)if(!isCleared(base,x,y))return false;
   return Object.entries(base.positions).every(([other,q])=>other===id||p.x+n<=q.x||q.x+FOOTPRINT[other]<=p.x||p.y+n<=q.y||q.y+FOOTPRINT[other]<=p.y);
 }
 export function restoreBase(saved,state,now) {
   const b=newBase(state.buildings);
-  if(!saved){for(const j of state.construction)if(!b.positions[j.id])b.positions[j.id]={x:DEFAULT_POSITIONS[j.id][0],y:DEFAULT_POSITIONS[j.id][1]};return b;}
+  if(!saved){for(const j of state.construction)if(!b.positions[j.id])b.positions[j.id]={x:DEFAULT_POSITIONS[j.id][0],y:DEFAULT_POSITIONS[j.id][1]};restoreFrontier(b,null);return b;}
   b.positions={};
+  b.cleared=Array.from({length:24*24},(_,i)=>`${i%24},${Math.floor(i/24)}`);
   for(const id of Object.keys(FOOTPRINT)) {
     if(!state.buildings[id]&&!state.construction.some(j=>j.id===id))continue;
     const preferred=saved.positions?.[id];
@@ -33,10 +36,11 @@ export function restoreBase(saved,state,now) {
   b.recruit=(Array.isArray(saved.recruit)?saved.recruit:[]).filter(valid).slice(0,5);
   b.training=(Array.isArray(saved.training)?saved.training:[]).filter(j=>valid(j)&&TROOPS[j.type]).slice(0,5);
   if(state.construction.length&&b.jobs.builder===0&&b.workers>0){const donor=Object.keys(JOBS).find(id=>b.jobs[id]>0);if(donor)b.jobs[donor]--;b.jobs.builder=1;}
+  restoreFrontier(b,saved);
   return b;
 }
 export function armySize(state){return Object.values(state.base.army).reduce((a,b)=>a+b,0);}
-export function idleWorkers(state){return state.base.workers-Object.values(state.base.jobs).reduce((a,b)=>a+b,0);}
+export function idleWorkers(state){return state.base.workers-Object.values(state.base.jobs).reduce((a,b)=>a+b,0)-(state.base.clearing?1:0);}
 export function assignJob(state,id,delta){
   if(!JOBS[id]||![1,-1].includes(delta))return {ok:false,message:'请选择工作'};
   if(delta>0&&idleWorkers(state)<1)return {ok:false,message:'没有空闲农民，请先招募或从其他工作调回'};

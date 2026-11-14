@@ -1,4 +1,4 @@
-import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=4';
+import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=5';
 
 const TAU = Math.PI * 2;
 function ellipse(ctx, x, y, rx, ry, color) {
