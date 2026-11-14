@@ -1,21 +1,28 @@
-import {terrainAt,isCleared} from './frontier.js?v=6';
-import {FOOTPRINT} from './base.js?v=6';
+import {terrainAt,isCleared} from './frontier.js?v=7';
+import {FOOTPRINT} from './base.js?v=7';
 const TAU=Math.PI*2;
 export function noise(x,y=0){const v=Math.sin(x*127.1+y*311.7)*43758.5453;return v-Math.floor(v);}
 export function oval(ctx,x,y,rx,ry,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,TAU);ctx.fill();}
+let shadowTexture;
+export function softShadow(ctx,x,y,rx,ry,opacity=.25){
+ if(!shadowTexture){shadowTexture=document.createElement('canvas');shadowTexture.width=128;shadowTexture.height=64;const c=shadowTexture.getContext('2d');c.scale(1,.5);const g=c.createRadialGradient(64,64,8,64,64,64);g.addColorStop(0,'#213628b0');g.addColorStop(.55,'#21362855');g.addColorStop(1,'#21362800');c.fillStyle=g;c.fillRect(0,0,128,128);}
+ ctx.save();ctx.globalAlpha*=opacity;ctx.drawImage(shadowTexture,x-rx,y-ry,rx*2,ry*2);ctx.restore();
+}
 export class Landscape{
  constructor(iso){this.iso=iso;this.ground=document.createElement('canvas');this.ground.width=2120;this.ground.height=1210;this.features=[];}
- update(state){
-  const stamp=state.base.cleared.join('|')+JSON.stringify(state.base.positions);
+ update(state,hiddenId){
+  const stamp=state.base.cleared.join('|')+JSON.stringify(state.base.positions)+'|'+hiddenId;
   if(stamp===this.stamp)return;this.stamp=stamp;
   const ctx=this.ground.getContext('2d'),iso=this.iso;
   ctx.clearRect(0,0,2120,1210);
   const ground=ctx.createLinearGradient(300,0,1550,1200);ground.addColorStop(0,'#729a52');ground.addColorStop(.5,'#83a95d');ground.addColorStop(1,'#597b43');ctx.fillStyle=ground;ctx.fillRect(0,0,2120,1210);
-  for(let i=0;i<700;i++){const x=noise(i,1)*2120,y=noise(i,2)*1210;oval(ctx,x,y,25+noise(i,3)*80,9+noise(i,4)*30,i%2?'#bccb7220':'#426d3a18');}
+  const texture=document.createElement('canvas');texture.width=106;texture.height=61;const tc=texture.getContext('2d'),pixels=tc.createImageData(106,61);
+  for(let i=0;i<106*61;i++){const v=noise(i%106,Math.floor(i/106)),j=i*4;pixels.data[j]=v>.5?172:49;pixels.data[j+1]=v>.5?183:92;pixels.data[j+2]=v>.5?104:50;pixels.data[j+3]=Math.round(Math.abs(v-.5)*32);}
+  tc.putImageData(pixels,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(texture,0,0,2120,1210);
   // Overlapping soft patches remove the visible tile grid while retaining exact build cells.
   for(const key of state.base.cleared){const [x,y]=key.split(',').map(Number),p=iso(x+.5,y+.5);ctx.save();ctx.translate(p.x,p.y);ctx.scale(1,.52);const patch=ctx.createRadialGradient(0,0,15,0,0,66);patch.addColorStop(0,'#afc57c');patch.addColorStop(.65,'#a6be73e8');patch.addColorStop(1,'#a6be7300');ctx.fillStyle=patch;ctx.fillRect(-68,-68,136,136);ctx.restore();}
   const hall=state.base.positions.hall??{x:11,y:11},home=iso(hall.x+1.5,hall.y+2.2);
-  for(const [id,p] of Object.entries(state.base.positions)){const n=FOOTPRINT[id],a=iso(p.x+n/2,p.y+n/2+.3);oval(ctx,a.x,a.y,55+n*6,24+n*2,'#c9b0795c');if(id!=='hall'){ctx.strokeStyle='#c1b07a66';ctx.lineWidth=15;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(home.x,home.y);ctx.quadraticCurveTo((home.x+a.x)/2+20,home.y+25,a.x,a.y);ctx.stroke();}}
+  for(const [id,p] of Object.entries(state.base.positions)){if(id===hiddenId)continue;const n=FOOTPRINT[id],a=iso(p.x+n/2,p.y+n/2+.3);oval(ctx,a.x,a.y,55+n*6,24+n*2,'#c9b0795c');if(id!=='hall'){ctx.strokeStyle='#c1b07a66';ctx.lineWidth=15;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(home.x,home.y);ctx.quadraticCurveTo((home.x+a.x)/2+20,home.y+25,a.x,a.y);ctx.stroke();}}
   // Tiny grasses and flowers are stable across reloads and stay out of building floors.
   for(let i=0;i<2800;i++){const x=noise(i,21)*24,y=noise(i,22)*24,p=iso(x,y);if(p.x<0||p.x>2120||p.y<0||p.y>1210)continue;const clear=isCleared(state.base,Math.floor(x),Math.floor(y));if(clear&&noise(i,23)>.3)continue;ctx.strokeStyle=clear?'#6d923944':'#385e3545';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(p.x-2,p.y);ctx.lineTo(p.x-3,p.y-3);ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+1,p.y-4);ctx.stroke();if(i%31===0)oval(ctx,p.x+2,p.y-3,1.4,1,'#f4df9bcc');}
   this.features=[];

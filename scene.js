@@ -1,4 +1,6 @@
-import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=6';
+import {drawVillager} from './units.js?v=7';
+import {screenToWorld,zoomAt} from './spatial.js?v=7';
+import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=7';
 
 const TAU = Math.PI * 2;
 function ellipse(ctx, x, y, rx, ry, color) {
@@ -11,6 +13,7 @@ function line(ctx, points, color, width = 2) {
 
 // Shared articulated sprite: the gait, tool and cargo are drawn independently.
 export function drawPerson(ctx,x,y,time,options={}){
+ if(drawVillager(ctx,x,y,time,options))return;
  const {scale=1,direction=1,walking=true,working=false,carrying=false,role='farm',era=0}=options;
  const stride=walking?Math.sin(time*9)*3:0,swing=working?Math.sin(time*6)*6:stride*.6;
  ctx.save();ctx.translate(x,y);ctx.scale(scale*direction,scale);
@@ -163,7 +166,7 @@ export class WorldMap {
   resize() {
     const box = this.canvas.parentElement.getBoundingClientRect();
     this.width = box.width; this.height = box.height;
-    const ratio = Math.min(devicePixelRatio || 1, 1.8);
+    const ratio = Math.min(devicePixelRatio || 1, 2.5);
     this.canvas.width = Math.round(this.width * ratio); this.canvas.height = Math.round(this.height * ratio);
     this.ratio = ratio;
   }
@@ -260,7 +263,7 @@ export class WorldMap {
   home() { this.camera = { ...tilePoint(WORLD.home), zoom: .95 }; this.following = false; }
   follow() { const p = this.explorerPosition(); this.camera.x = p.x; this.camera.y = p.y; this.following = true; }
   fit() { this.camera = { x: WORLD.width / 2, y: WORLD.height / 2, zoom: Math.min(this.width / WORLD.width, this.height / WORLD.height) * .96 }; this.following = false; }
-  zoomBy(factor) { this.camera.zoom = Math.max(.15, Math.min(2.5, this.camera.zoom * factor)); }
+  zoomBy(factor,screen) {const r=this.canvas.getBoundingClientRect(),v={left:r.left,top:r.top,width:r.width,height:r.height},p=screen??{x:r.left+r.width/2,y:r.top+r.height/2};this.camera=zoomAt(this.camera,screenToWorld(p,this.camera,v),p,v,this.camera.zoom*factor,.15);this.following=false;}
   pick(x, y) {
     const worldX = (x - this.width / 2) / this.camera.zoom + this.camera.x;
     const worldY = (y - this.height / 2) / this.camera.zoom + this.camera.y;
@@ -271,9 +274,9 @@ export class WorldMap {
   }
   bindInput() {
     let drag = null; const fingers=new Map();let pinch=null;
-    this.canvas.addEventListener('pointerdown', e => { fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(fingers.size===2){const [a,b]=[...fingers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:this.camera.zoom};drag=null;this.canvas.setPointerCapture(e.pointerId);return;} drag = { x: e.clientX, y: e.clientY, cx: this.camera.x, cy: this.camera.y }; this.canvas.setPointerCapture(e.pointerId); });
+    this.canvas.addEventListener('pointerdown', e => { fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(fingers.size===2){const [a,b]=[...fingers.values()];const r=this.canvas.getBoundingClientRect(),v={left:r.left,top:r.top,width:r.width,height:r.height},mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};pinch={d:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),camera:{...this.camera},anchor:screenToWorld(mid,this.camera,v)};this.following=false;drag=null;this.canvas.setPointerCapture(e.pointerId);return;} drag = { x: e.clientX, y: e.clientY, cx: this.camera.x, cy: this.camera.y }; this.canvas.setPointerCapture(e.pointerId); });
     this.canvas.addEventListener('pointermove', e => {
-      if(fingers.has(e.pointerId))fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(fingers.size===2&&pinch){const [a,b]=[...fingers.values()];this.camera.zoom=Math.max(.15,Math.min(2.5,pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d));return;}
+      if(fingers.has(e.pointerId))fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(fingers.size===2&&pinch){const [a,b]=[...fingers.values()];const r=this.canvas.getBoundingClientRect(),v={left:r.left,top:r.top,width:r.width,height:r.height},mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};this.camera=zoomAt(pinch.camera,pinch.anchor,mid,v,pinch.camera.zoom*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d,.15);return;}
       if (!drag) return;
       if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
       this.following = false;
@@ -285,7 +288,7 @@ export class WorldMap {
       drag = null;
     });
     this.canvas.addEventListener('pointercancel', () => { drag = null;fingers.clear();pinch=null; });
-    this.canvas.addEventListener('wheel', e => { if (!this.active) return; e.preventDefault(); this.zoomBy(e.deltaY > 0 ? .9 : 1.1); }, { passive: false });
+    this.canvas.addEventListener('wheel', e => { if (!this.active) return; e.preventDefault(); this.zoomBy(e.deltaY > 0 ? .9 : 1.1,{x:e.clientX,y:e.clientY}); }, { passive: false });
     this.canvas.addEventListener('keydown', e => {
       const deltas = { ArrowLeft: [-60, 0], ArrowRight: [60, 0], ArrowUp: [0, -60], ArrowDown: [0, 60] };
       if (deltas[e.key]) { e.preventDefault(); this.following = false; this.camera.x += deltas[e.key][0] / this.camera.zoom; this.camera.y += deltas[e.key][1] / this.camera.zoom; }

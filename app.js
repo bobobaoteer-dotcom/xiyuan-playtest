@@ -1,14 +1,14 @@
-import { BaseScene } from './base-scene.js?v=6';
-import {OBSTACLES,terrainAt,isCleared,canClear,startClearing} from './frontier.js?v=6';
-import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits} from './base.js?v=6';
+import { BaseScene } from './base-scene.js?v=7';
+import {OBSTACLES,terrainAt,isCleared,canClear,startClearing} from './frontier.js?v=7';
+import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits,placementIssue} from './base.js?v=7';
 import {
   SAVE_KEY, RESOURCE_IDS, ERAS, BUILDINGS, TECHNOLOGIES, POLICIES, ROUTES, MILESTONES,
   newGame, restoreGame, capacity, populationCap, rates, buildingName, buildingPlan,
   canAfford, startBuilding, nextResearch, startResearch, expeditionPlan, startExpedition,
   collectExpedition, claimMilestone, eraRequirements, advanceEra, advanceTime, startSurvey,
-} from './engine.js?v=6';
-import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=6';
-import { LivingSettlement, WorldMap } from './scene.js?v=6';
+} from './engine.js?v=7';
+import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=7';
+import { LivingSettlement, WorldMap } from './scene.js?v=7';
 
 const PATHS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/>',
@@ -269,23 +269,25 @@ function explorePanel(){
  return `<div class="context-heading"><span class="context-icon">${icon(known?tile.icon:'compass')}</span><div><h2>${selectedTile===WORLD.home?'文明的起点':known?tile.label:'未知地区'}</h2><p>${known?tile.name:'沿着迷雾边缘，看看外面的世界'}</p></div></div>${world.survey?`<div class="task-status"><span class="working-dot"></span>探索队正在前进 <b data-countdown="${world.survey.end}"></b></div>`:!plan.blocked?`<div class="terrain-reward"><span>${icon('wheat')} ${plan.food} 补给</span><small>${duration(plan.seconds)}</small></div>`:`<p class="panel-hint">${plan.blocked}</p>`}<button class="primary-button" data-action="survey" ${world.survey||plan.blocked?'disabled':''}>${icon('compass')}${world.survey?'探索进行中':visited?'已勘明':'探索这里'}</button><button class="secondary-button" data-action="toggle-auto">${world.auto?'暂停自动探索':'开启自动探索'}</button><details class="more-details"><summary>探索设置与发现</summary><button class="secondary-button" data-action="nearby-frontier">寻找附近边界</button><label for="world-direction">探索方向</label><select id="world-direction">${[['balanced','均衡'],['east','向东'],['west','向西'],['north','向北'],['south','向南']].map(([id,name])=>`<option value="${id}" ${world.direction===id?'selected':''}>${name}</option>`).join('')}</select><p>已发现 ${world.sites.length} 处资源地。青铜筑造可翻山，道路远航可渡海。</p><button class="secondary-button" data-action="legacy-expedition">资源远征</button></details>`;
 }
 
+function cancelPlacement(){placement=null;baseScene.placing=null;$('#placement-hud').hidden=true;document.body.classList.remove('placing-building');}
 function beginPlacement(id){
   if(!isWriter)return toast('请先关闭另一游戏窗口');
-  placement=id;closePanel();setMapMode('home');baseScene.begin(id);
+  placement=id;closePanel();setMapMode('home');document.body.classList.add('placing-building');baseScene.begin(id);
   $('#right-sidebar').classList.remove('open');$('#sheet-scrim').hidden=true;
   $('#placement-hud').hidden=false;updatePlacement(baseScene.ghost);
 }
 function updatePlacement(p){
-  if(!placement)return;
-  const valid=fits(state.base,placement,p);
-  $('#placement-hud').innerHTML=`<strong>${valid?'可以建造':'需先拓荒，或位置已被占用'} · ${p.x}, ${p.y}</strong><small>在已开垦空地选址；取消后点击树林、石堆可拓荒</small><div><button id="confirm-placement" ${valid?'':'disabled'}>确认${state.base.positions[placement]?'迁移':'建造'}</button><button id="cancel-placement">取消</button></div>`;
-  $('#confirm-placement').onclick=()=>{
-    advanceTime(state);
-    const result=state.base.positions[placement]?moveBuilding(state,placement,baseScene.ghost):startBuilding(state,placement,Date.now(),baseScene.ghost);
-    if(result.ok){baseScene.placing=null;placement=null;$('#placement-hud').hidden=true;}
-    runAction(result);
-  };
-  $('#cancel-placement').onclick=()=>{placement=null;baseScene.placing=null;$('#placement-hud').hidden=true;};
+ if(!placement)return;
+ const issue=placementIssue(state.base,placement,p),valid=!issue,b=BUILDINGS.find(b=>b.id===placement);
+ const reason=issue?.type==='boundary'?'超出营地边界':issue?.type==='uncleared'?'先清理红色地块':issue?.type==='occupied'?'与'+buildingName(state,BUILDINGS.find(b=>b.id===issue.id))+'重叠':'位置合适';
+ $('#placement-hud').innerHTML=`<div class="placement-title"><strong>${buildingName(state,b)}</strong><span class="placement-feedback ${valid?'valid':'invalid'}">${icon(valid?'check':'close')}${reason}</span></div><small>拖动建筑或点空地放置，箭头可逐格微调</small><div class="placement-tools"><div class="placement-nudges" role="group" aria-label="微调建筑位置">${[[-1,0,'左上',206.565],[0,-1,'右上',333.435],[0,1,'左下',153.435],[1,0,'右下',26.565]].map(([dx,dy,name,angle])=>`<button data-nudge-x="${dx}" data-nudge-y="${dy}" aria-label="向${name}微调"><span style="transform:rotate(${angle}deg)">${icon('arrow')}</span></button>`).join('')}</div><button id="cancel-placement" aria-label="取消放置">${icon('close')}</button><button id="confirm-placement" ${valid?'':'disabled'}>${icon('check')}确认</button></div>`;
+ $('#placement-hud').querySelectorAll('[data-nudge-x]').forEach(button=>button.onclick=()=>baseScene.nudge(Number(button.dataset.nudgeX),Number(button.dataset.nudgeY)));
+ $('#confirm-placement').onclick=()=>{
+  advanceTime(state);const target={...baseScene.ghost};
+  const result=state.base.positions[placement]?moveBuilding(state,placement,target):startBuilding(state,placement,Date.now(),target);
+  if(result.ok)cancelPlacement();runAction(result);
+ };
+ $('#cancel-placement').onclick=cancelPlacement;
 }
 function updateWorkforceLive(){
   document.querySelectorAll('[data-time-left]').forEach(e=>{e.textContent=duration((Number(e.dataset.timeLeft)-Date.now())/1000);});
@@ -434,6 +436,7 @@ function runAction(result) {
 document.addEventListener('click', event => {
   const tabButton = event.target.closest('[data-tab]');
   if (tabButton) {
+    if(placement)cancelPlacement();
     if (tabButton.dataset.tab === 'world') setMapMode('home');
     else if (tabButton.dataset.tab === 'explore') setMapMode('world');
     else openPanel(tabButton.dataset.tab);

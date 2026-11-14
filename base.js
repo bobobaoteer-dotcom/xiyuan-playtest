@@ -1,4 +1,4 @@
-import {initialClearing,isCleared,restoreFrontier} from './frontier.js?v=6';
+import {initialClearing,isCleared,restoreFrontier} from './frontier.js?v=7';
 export const GRID = 24;
 export const FOOTPRINT = { hall:3, farm:3, lumber:2, quarry:2, homes:2, library:3, warehouse:2, market:3, tower:2, barracks:3 };
 export const DEFAULT_POSITIONS = { hall:[11,11],farm:[15,11],lumber:[7,10],quarry:[11,6],homes:[8,15],library:[15,15],warehouse:[5,14],market:[16,6],tower:[6,5],barracks:[11,17] };
@@ -7,12 +7,14 @@ export const TROOPS = { militia:{name:'长矛兵',food:40,wood:15,coin:12,second
 export function newBase(buildings) {
   return {cleared:initialClearing(),clearing:null,positions:Object.fromEntries(Object.keys(buildings).filter(id=>buildings[id]>0).map(id=>[id,{x:DEFAULT_POSITIONS[id][0],y:DEFAULT_POSITIONS[id][1]}])),workers:3,jobs:{wood:1,stone:1,food:0,builder:1},recruit:[],training:[],army:{militia:0,archer:0}};
 }
-export function fits(base,id,p) {
-  const n=FOOTPRINT[id];
-  if(!n||!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)||p.x<3||p.y<3||p.x+n>21||p.y+n>21)return false;
-  for(let y=p.y;y<p.y+n;y++)for(let x=p.x;x<p.x+n;x++)if(!isCleared(base,x,y))return false;
-  return Object.entries(base.positions).every(([other,q])=>other===id||p.x+n<=q.x||q.x+FOOTPRINT[other]<=p.x||p.y+n<=q.y||q.y+FOOTPRINT[other]<=p.y);
+export function placementIssue(base,id,p){
+ const n=FOOTPRINT[id];if(!n||!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)||p.x<3||p.y<3||p.x+n>21||p.y+n>21)return{type:'boundary'};
+ const blocked=[];for(let y=p.y;y<p.y+n;y++)for(let x=p.x;x<p.x+n;x++)if(!isCleared(base,x,y))blocked.push({x,y});
+ if(blocked.length)return{type:'uncleared',cells:blocked};
+ for(const[other,q]of Object.entries(base.positions))if(other!==id&&!(p.x+n<=q.x||q.x+FOOTPRINT[other]<=p.x||p.y+n<=q.y||q.y+FOOTPRINT[other]<=p.y))return{type:'occupied',id:other};
+ return null;
 }
+export function fits(base,id,p){return placementIssue(base,id,p)===null;}
 export function restoreBase(saved,state,now) {
   const b=newBase(state.buildings);
   if(!saved){for(const j of state.construction)if(!b.positions[j.id])b.positions[j.id]={x:DEFAULT_POSITIONS[j.id][0],y:DEFAULT_POSITIONS[j.id][1]};restoreFrontier(b,null);return b;}
