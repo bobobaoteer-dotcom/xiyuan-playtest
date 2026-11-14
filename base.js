@@ -1,4 +1,4 @@
-import {initialClearing,isCleared,restoreFrontier} from './frontier.js?v=5';
+import {initialClearing,isCleared,restoreFrontier} from './frontier.js?v=6';
 export const GRID = 24;
 export const FOOTPRINT = { hall:3, farm:3, lumber:2, quarry:2, homes:2, library:3, warehouse:2, market:3, tower:2, barracks:3 };
 export const DEFAULT_POSITIONS = { hall:[11,11],farm:[15,11],lumber:[7,10],quarry:[11,6],homes:[8,15],library:[15,15],warehouse:[5,14],market:[16,6],tower:[6,5],barracks:[11,17] };

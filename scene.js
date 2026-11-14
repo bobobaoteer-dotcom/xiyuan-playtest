@@ -1,4 +1,4 @@
-import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=5';
+import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=6';
 
 const TAU = Math.PI * 2;
 function ellipse(ctx, x, y, rx, ry, color) {
@@ -10,37 +10,26 @@ function line(ctx, points, color, width = 2) {
 }
 
 // Shared articulated sprite: the gait, tool and cargo are drawn independently.
-export function drawPerson(ctx, x, y, time, options = {}) {
-  const { scale = 1, direction = 1, walking = true, working = false, carrying = false, role = 'farm', era = 0 } = options;
-  const stride = walking ? Math.sin(time * 11) * 3.8 : 0;
-  ctx.save(); ctx.translate(x, y); ctx.scale(scale * direction, scale);
-  ellipse(ctx, 0, 1, 7.5, 2.7, '#162b264d');
-  ctx.translate(0, walking ? -Math.abs(Math.sin(time * 11)) * 1.2 : 0);
-  line(ctx, [[-2, -7], [-2 + stride, 0]], '#3d352b', 3.1);
-  line(ctx, [[3, -7], [3 - stride, 0]], '#584537', 3.2);
-  const colors = era >= 4 ? ['#c6d8c9', '#759a9b', '#cebf9a'] : ['#b38a54', '#8e6c43', '#74816a', '#c1a276'];
-  ctx.fillStyle = colors[role === 'lumber' ? 1 : role === 'quarry' ? 2 : role === 'builder' ? 3 : 0] ?? colors[0];
-  ctx.beginPath(); ctx.moveTo(-4, -17); ctx.quadraticCurveTo(0, -20, 5, -16); ctx.lineTo(6, -7); ctx.lineTo(-5, -7); ctx.closePath(); ctx.fill();
-  line(ctx, [[-4, -10], [5, -10]], '#604c36', 1.4);
-  const arm = working ? Math.sin(time * 5.5) * 5 : -stride * .7;
-  line(ctx, [[-4, -16], [-7, -10 + arm]], '#b48b64', 2.7);
-  line(ctx, [[4, -16], [7, -10 - arm]], '#d4b58d', 2.8);
-  ellipse(ctx, 1, -22, 4, 4.8, '#dcb990');
-  ctx.fillStyle = era >= 4 ? '#d3e3db' : '#4f3d2d';
-  ctx.beginPath(); ctx.ellipse(.5, -24, 4.4, 3, -.15, Math.PI, TAU + .3); ctx.fill();
-  ellipse(ctx, 3, -22, .55, .65, '#463d32');
-  if (era >= 4) line(ctx, [[-2, -22], [5, -22]], '#77bcc6', 1.6);
-  if (carrying) {
-    ctx.fillStyle = role === 'quarry' ? '#a9a894' : role === 'lumber' ? '#785637' : '#b99a58';
-    ctx.fillRect(-9, -17, 5, 8);
-    line(ctx, [[-9, -15], [-4, -15], [-4, -12], [-9, -12]], '#d1b27c', .8);
-  }
-  if (working) {
-    const tip = [-7 + Math.sin(time * 5.5) * 2, -18 + arm];
-    line(ctx, [[-7, -10 + arm], tip], '#735b39', 1.8);
-    if (role === 'lumber' || role === 'quarry' || role === 'builder') line(ctx, [[tip[0] - 3, tip[1]], [tip[0] + 3, tip[1] - 2]], '#bdc4b0', 3);
-  }
-  ctx.restore();
+export function drawPerson(ctx,x,y,time,options={}){
+ const {scale=1,direction=1,walking=true,working=false,carrying=false,role='farm',era=0}=options;
+ const stride=walking?Math.sin(time*9)*3:0,swing=working?Math.sin(time*6)*6:stride*.6;
+ ctx.save();ctx.translate(x,y);ctx.scale(scale*direction,scale);
+ ellipse(ctx,1,1,8,3,'#25433240');ctx.translate(0,walking?-Math.abs(Math.sin(time*9))*.9:0);
+ const limb=(ax,ay,bx,by,color,width)=>line(ctx,[[ax,ay],[bx,by]],color,width);
+ limb(-2,-8,-3+stride,0,'#63452d',4.2);limb(3,-8,3-stride,0,'#80603d',4.4);
+ ellipse(ctx,-3+stride,0,3,1.8,'#493a2a');ellipse(ctx,4-stride,0,3,1.8,'#59422b');
+ limb(-5,-18,-8,-10+swing,'#b28657',3.7);
+ const palette=era>=4?['#dce8dd','#7fa4a2']:role==='quarry'?['#a9b77d','#637e4b']:role==='builder'?['#dfb96f','#a7783e']:role==='lumber'?['#c59a62','#88613b']:['#d8b681','#95713f'];
+ const body=ctx.createLinearGradient(-6,-14,7,-14);body.addColorStop(0,palette[0]);body.addColorStop(1,palette[1]);ctx.fillStyle=body;ctx.beginPath();ctx.moveTo(-4,-19);ctx.quadraticCurveTo(0,-22,5,-18);ctx.lineTo(7,-7);ctx.quadraticCurveTo(0,-4,-6,-7);ctx.closePath();ctx.fill();
+ limb(-5,-9,6,-9,'#74502f',1.5);ellipse(ctx,2,-9,1.3,1.4,'#dab87b');
+ limb(5,-17,8,-10-swing,'#dfb780',4);ellipse(ctx,8,-10-swing,2,2.2,'#edc999');
+ ctx.fillStyle='#87603c';ctx.beginPath();ctx.roundRect(-2,-23,5,5,2);ctx.fill();
+ const skin=ctx.createRadialGradient(-1,-28,1,2,-25,8);skin.addColorStop(0,'#ffdfab');skin.addColorStop(1,'#c18b54');ellipse(ctx,1,-26,5.8,6.1,skin);ellipse(ctx,6.2,-26,1.4,2,'#dfb07d');
+ ctx.fillStyle=era>=4?'#dce8dd':'#5c422c';ctx.beginPath();ctx.ellipse(.4,-29,6.2,4.3,-.15,Math.PI,TAU+.2);ctx.fill();ellipse(ctx,5,-27,1.1,2.7,era>=4?'#8baba0':'#62452c');ellipse(ctx,3.9,-25.9,.6,.8,'#47372a');
+ if(era>=4)limb(-3,-26,5,-26,'#77bcc6',1.4);
+ if(carrying){if(role==='lumber'){limb(-10,-19,-10,-9,'#815330',7);ellipse(ctx,-10,-19,3.5,1.8,'#d9af70');}else{ellipse(ctx,-9,-14,4,6,role==='quarry'?'#9da897':'#c59d58');limb(-12,-14,-6,-14,'#e4d3a3',1);}}
+ if(working){ctx.save();ctx.translate(8,-10-swing);ctx.rotate(-.6+Math.sin(time*6)*.7);limb(0,1,0,-14,'#76502d',2);if(['lumber','quarry','builder'].includes(role)){limb(-4,-12,4,-14,'#d0d4bd',3.5);}else ellipse(ctx,0,-13,2.5,2,'#d4b568');ctx.restore();}
+ ctx.restore();
 }
 
 function routePosition(points, fraction) {
