@@ -51,3 +51,5 @@
 @media(max-height:510px){.immersive-game.placing-building .map-controls{top:80px;bottom:auto}}
 
 .immersive-game.placing-building .toast-region{top:calc(130px + env(safe-area-inset-top,0px));bottom:auto}
+/* Feedback stays clear of active construction and placement controls. */
+.immersive-game:not(.view-world) .toast-region{top:calc(130px + env(safe-area-inset-top,0px));bottom:auto}.immersive-game.view-world .construction-strip{display:none}
