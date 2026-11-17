@@ -1,5 +1,5 @@
-import {FOOTPRINT} from './base.js?v=7';
-import {iso} from './spatial.js?v=7';
+import {FOOTPRINT} from './base.js?v=8';
+import {iso} from './spatial.js?v=8';
 export function walkableCells(state){
  const occupied=new Set();for(const[id,p]of Object.entries(state.base.positions))for(let y=p.y;y<p.y+FOOTPRINT[id];y++)for(let x=p.x;x<p.x+FOOTPRINT[id];x++)occupied.add(`${x},${y}`);
  return new Set(state.base.cleared.filter(k=>!occupied.has(k)));

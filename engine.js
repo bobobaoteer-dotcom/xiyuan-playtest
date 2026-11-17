@@ -1,6 +1,6 @@
-import {finishClearing} from './frontier.js?v=7';
-import { newBase, restoreBase, fits } from './base.js?v=7';
-import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=7';
+import {finishClearing} from './frontier.js?v=8';
+import { newBase, restoreBase, fits } from './base.js?v=8';
+import { newWorld, restoreWorld, automaticSurveyPlan, surveyPlan, beginSurvey, completeSurvey, explorationBonuses, WORLD } from './world.js?v=8';
 
 export const SAVE_KEY = 'xiyuan.civilization.v1';
 export const RESOURCE_IDS = ['wood', 'stone', 'food', 'coin', 'knowledge'];

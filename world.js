@@ -1,4 +1,4 @@
-import { TERRAIN } from './world-terrain.js?v=7';
+import { TERRAIN } from './world-terrain.js?v=8';
 
 export const WORLD = { columns: 48, rows: 34, radius: 25, width: 2122, height: 1288, home: 877 };
 export const BIOMES = {

@@ -1,4 +1,4 @@
-import {softShadow} from './landscape.js?v=7';
+import {softShadow} from './landscape.js?v=8';
 let atlas=null,frames=null;
 const WALK=[0,1,2,3],WORK=[1,0,2,3];
 function loadAtlas(){
@@ -18,9 +18,9 @@ function loadAtlas(){
 export function drawVillager(ctx,x,y,time,options={}){
  loadAtlas();if(!atlas?.complete||!atlas.naturalWidth||!frames||options.era>=3)return false;
  const{scale=1,direction=1,walking=true,working=false,carrying=false,role='farm'}=options;
- const row=working?(role==='lumber'?1:role==='quarry'||role==='builder'?2:0):carrying?3:0;
+ const row=working?(role==='lumber'?1:role==='quarry'||role==='builder'?2:0):carrying&&role==='lumber'?3:0;
  const order=row===1||row===2?WORK:WALK,col=working&&row===0?1:(working||walking)?order[Math.floor(time*(working?5.8:6.5))%4]:1,index=row*4+col,sw=atlas.naturalWidth/4,sh=atlas.naturalHeight/4,size=43*scale,foot=frames[index].foot;
  softShadow(ctx,x+2,y+1,7*scale,2.6*scale,.34);
- ctx.save();ctx.translate(x,y);ctx.scale(direction,!walking&&row===0?1+Math.sin(time*2.5)*.006:1);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(atlas,col*sw,row*sh,sw,sh,-size*.5,-size*foot,size,size);ctx.restore();
+ ctx.save();ctx.translate(x,y);ctx.rotate(walking?Math.sin(time*6.5)*.012:0);ctx.scale(direction,!walking&&row===0?1+Math.sin(time*2.5)*.006:1);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(atlas,col*sw,row*sh,sw,sh,-size*.5,-size*foot,size,size);ctx.restore();
  return true;
 }

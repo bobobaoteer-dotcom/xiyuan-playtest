@@ -1,5 +1,6 @@
-import {terrainAt,isCleared} from './frontier.js?v=7';
-import {FOOTPRINT} from './base.js?v=7';
+import {walkRoute} from './walkways.js?v=8';
+import {terrainAt,isCleared} from './frontier.js?v=8';
+import {FOOTPRINT} from './base.js?v=8';
 const TAU=Math.PI*2;
 export function noise(x,y=0){const v=Math.sin(x*127.1+y*311.7)*43758.5453;return v-Math.floor(v);}
 export function oval(ctx,x,y,rx,ry,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,TAU);ctx.fill();}
@@ -9,7 +10,7 @@ export function softShadow(ctx,x,y,rx,ry,opacity=.25){
  ctx.save();ctx.globalAlpha*=opacity;ctx.drawImage(shadowTexture,x-rx,y-ry,rx*2,ry*2);ctx.restore();
 }
 export class Landscape{
- constructor(iso){this.iso=iso;this.ground=document.createElement('canvas');this.ground.width=2120;this.ground.height=1210;this.features=[];}
+ constructor(iso){this.iso=iso;this.ground=document.createElement('canvas');this.ground.width=2120;this.ground.height=1210;this.features=[];this.details=[];}
  update(state,hiddenId){
   const stamp=state.base.cleared.join('|')+JSON.stringify(state.base.positions)+'|'+hiddenId;
   if(stamp===this.stamp)return;this.stamp=stamp;
@@ -22,18 +23,20 @@ export class Landscape{
   // Overlapping soft patches remove the visible tile grid while retaining exact build cells.
   for(const key of state.base.cleared){const [x,y]=key.split(',').map(Number),p=iso(x+.5,y+.5);ctx.save();ctx.translate(p.x,p.y);ctx.scale(1,.52);const patch=ctx.createRadialGradient(0,0,15,0,0,66);patch.addColorStop(0,'#afc57c');patch.addColorStop(.65,'#a6be73e8');patch.addColorStop(1,'#a6be7300');ctx.fillStyle=patch;ctx.fillRect(-68,-68,136,136);ctx.restore();}
   const hall=state.base.positions.hall??{x:11,y:11},home=iso(hall.x+1.5,hall.y+2.2);
-  for(const [id,p] of Object.entries(state.base.positions)){if(id===hiddenId)continue;const n=FOOTPRINT[id],a=iso(p.x+n/2,p.y+n/2+.3);oval(ctx,a.x,a.y,55+n*6,24+n*2,'#c9b0795c');if(id!=='hall'){ctx.strokeStyle='#c1b07a66';ctx.lineWidth=15;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(home.x,home.y);ctx.quadraticCurveTo((home.x+a.x)/2+20,home.y+25,a.x,a.y);ctx.stroke();}}
+  for(const [id,p] of Object.entries(state.base.positions)){if(id===hiddenId)continue;const n=FOOTPRINT[id],a=iso(p.x+n/2,p.y+n/2+.3);oval(ctx,a.x,a.y,55+n*6,24+n*2,'#c9b0795c');if(id!=='hall'){const route=walkRoute(state,{x:hall.x+3,y:hall.y+2},{x:p.x+n,y:p.y+1});if(route.length>1){for(const[color,width]of [['#687d3b25',23],['#c2b3806b',15],['#e1c99a29',5]]){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);for(let i=1;i<route.length;i++){const next=route[i+1]??route[i];ctx.quadraticCurveTo(route[i].x,route[i].y,(route[i].x+next.x)/2,(route[i].y+next.y)/2);}ctx.stroke();}}}}
   // Tiny grasses and flowers are stable across reloads and stay out of building floors.
   for(let i=0;i<2800;i++){const x=noise(i,21)*24,y=noise(i,22)*24,p=iso(x,y);if(p.x<0||p.x>2120||p.y<0||p.y>1210)continue;const clear=isCleared(state.base,Math.floor(x),Math.floor(y));if(clear&&noise(i,23)>.3)continue;ctx.strokeStyle=clear?'#6d923944':'#385e3545';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(p.x-2,p.y);ctx.lineTo(p.x-3,p.y-3);ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+1,p.y-4);ctx.stroke();if(i%31===0)oval(ctx,p.x+2,p.y-3,1.4,1,'#f4df9bcc');}
+  const occupied=(x,y)=>Object.entries(state.base.positions).some(([id,p])=>x>=p.x-.3&&x<=p.x+FOOTPRINT[id]+.3&&y>=p.y-.3&&y<=p.y+FOOTPRINT[id]+.3);
+  this.details=[];for(const key of state.base.cleared){const[x,y]=key.split(',').map(Number);if(occupied(x+.5,y+.5))continue;const edge=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>!isCleared(state.base,x+dx,y+dy));if(edge&&noise(x+4,y)<.4)this.details.push({pos:iso(x+.2,y+.3),size:22+noise(x,y)*13});}
   this.features=[];
   for(let y=0;y<24;y++)for(let x=0;x<24;x++){
    if(isCleared(state.base,x,y))continue;const type=terrainAt(x,y);
-   if(type==='mountain'&&(!(x===1||y===1||x===22||y===22)||(x+y)%3!==0))continue;
+   if(type==='mountain'&&!((x===1||x===22)&&y%5===1||(y===1||y===22)&&x%5===3))continue;
    const near=state.base.cleared.some(key=>{const [cx,cy]=key.split(',').map(Number);return Math.abs(cx-x)+Math.abs(cy-y)<=2;});
-   if(type==='forest'&&!near&&noise(x+31,y)<.28)continue;
+   if(type==='forest'&&!near&&noise(x+31,y)<.40)continue;
    const p=iso(x+.5+(noise(x,y)-.5)*.35,y+.5+(noise(y,x+1)-.5)*.35);
-   const size=type==='mountain'?190+noise(x,y+4)*55:type==='rock'?64+noise(x,y+5)*28:85+noise(x,y+5)*38;
-   this.features.push({x,y,type,pos:p,size,index:type==='forest'?6:type==='rock'?7:8,phase:noise(x,y+6)*TAU});
+   const size=type==='mountain'?145+noise(x,y+4)*65:type==='rock'?64+noise(x,y+5)*28:85+noise(x,y+5)*38;
+   this.features.push({x,y,type,pos:p,size,variant:Math.floor(noise(x+9,y+23)*3),index:type==='forest'?6:type==='rock'?7:8,phase:noise(x,y+6)*TAU});
   }
  }
 }

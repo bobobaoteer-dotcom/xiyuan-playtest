@@ -1,14 +1,15 @@
-import { BaseScene } from './base-scene.js?v=7';
-import {OBSTACLES,terrainAt,isCleared,canClear,startClearing} from './frontier.js?v=7';
-import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits,placementIssue} from './base.js?v=7';
+import {buildingArt} from './art.js?v=8';
+import { BaseScene } from './base-scene.js?v=8';
+import {OBSTACLES,terrainAt,isCleared,canClear,startClearing} from './frontier.js?v=8';
+import {JOBS,TROOPS,idleWorkers,armySize,assignJob,recruitFarmer,trainTroop,moveBuilding,fits,placementIssue} from './base.js?v=8';
 import {
   SAVE_KEY, RESOURCE_IDS, ERAS, BUILDINGS, TECHNOLOGIES, POLICIES, ROUTES, MILESTONES,
   newGame, restoreGame, capacity, populationCap, rates, buildingName, buildingPlan,
   canAfford, startBuilding, nextResearch, startResearch, expeditionPlan, startExpedition,
   collectExpedition, claimMilestone, eraRequirements, advanceEra, advanceTime, startSurvey,
-} from './engine.js?v=7';
-import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=7';
-import { LivingSettlement, WorldMap } from './scene.js?v=7';
+} from './engine.js?v=8';
+import { WORLD, BIOMES, SITES, tileInfo, tilePoint, frontier, surveyPlan, automaticSurveyPlan } from './world.js?v=8';
+import { LivingSettlement, WorldMap } from './scene.js?v=8';
 
 const PATHS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/>',
@@ -206,8 +207,7 @@ function chronicleHtml() {
 }
 
 function spriteStyle(b){
-  const index=state.era===0?({hall:0,farm:1,lumber:2,quarry:3,homes:4,library:5,warehouse:2,market:4,tower:0,barracks:4})[b.id]:b.sprite;
-  return `background-image:url(./assets/${state.era===0?'village-atlas-v6.webp':'buildings.png'});background-size:300% ${state.era===0?300:200}%;background-position:${index%3*50}% ${Math.floor(index/3)*(state.era===0?50:100)}%`;
+ const a=buildingArt(b.id,state.era,b.sprite);if(a.uv){const u=a.uv;return `background-image:url(./assets/${a.file});background-size:${100/u.w}% ${100/u.h}%;background-position:${u.x/(1-u.w)*100}% ${u.y/(1-u.h)*100}%`;}return `background-image:url(./assets/${a.file});background-size:${a.columns*100}% ${a.rows*100}%;background-position:${a.index%a.columns*100/(a.columns-1)}% ${Math.floor(a.index/a.columns)*100/(a.rows-1)}%`;
 }
 function buildingPanel(id){
   const b=BUILDINGS.find(b=>b.id===id),plan=buildingPlan(state,id),level=state.buildings[id],job=state.construction.find(j=>j.id===id);

@@ -1,6 +1,6 @@
-import {drawVillager} from './units.js?v=7';
-import {screenToWorld,zoomAt} from './spatial.js?v=7';
-import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=7';
+import {drawVillager} from './units.js?v=8';
+import {screenToWorld,zoomAt} from './spatial.js?v=8';
+import { WORLD, BIOMES, SITES, tilePoint, tileInfo, neighbors, frontier } from './world.js?v=8';
 
 const TAU = Math.PI * 2;
 function ellipse(ctx, x, y, rx, ry, color) {
