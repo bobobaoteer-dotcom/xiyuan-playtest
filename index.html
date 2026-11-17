@@ -44,6 +44,7 @@
   <div class="sheet-scrim" id="sheet-scrim" hidden></div>
   <dialog id="game-dialog"><button class="dialog-close icon-button" id="dialog-close" aria-label="关闭弹窗" data-icon="close"></button><div id="dialog-content"></div></dialog>
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
-  <script type="module" src="./app.js?v=8"></script>
+  <div id="startup-status" style="position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#284b35;color:#fff7df;text-align:center;padding:28px;font:16px/1.8 sans-serif"><div><p id="startup-message">正在打开你的文明…</p><button id="startup-retry" hidden style="padding:12px 24px;border:0;border-radius:12px;background:#f5ca6c;color:#29422e;font:inherit">重新加载</button></div></div><style>#startup-status[hidden]{display:none!important}</style>
+<script src="./boot.js?v=9"></script><script defer src="./game.bundle.js?v=9"></script>
 </body>
 </html>
